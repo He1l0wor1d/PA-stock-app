@@ -5,328 +5,327 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
-# 1. 網頁基本設定
-st.set_page_config(layout="wide", page_title="美股+台股指標趨勢、網格波段與Henry戰法綜合導航系統")
-st.title("🦅 美股+台股指標網格 vs Henry戰法雙系統終極儀表板")
-st.markdown("本系統全面相容**原有雙軌量化清單**與**Henry秒懂美股核心戰法**，助您多維度確認資金交叉共振點。")
+# ==========================================
+# 核心架構：Henry 策略量化分析類別
+# ==========================================
+class HenryStockAnalyzer:
+    def __init__(self, ticker_str, start_date, end_date):
+        self.ticker_str = ticker_str.strip().upper()
+        self.start_date = start_date
+        self.end_date = end_date
+        self.df = pd.DataFrame()
+        self.info = {}
 
-# 2. 內建核心產業與「卡脖子」供應鏈地圖 (台美股綜合)
-INITIAL_SECTOR_MAP = {
-    "2330.TW": "🇹🇼 台股 - 半導體晶圓代工 (全球核心)", "2851.TW": "🇹🇼 台股 - 金融再保險",
-    "GEV": "⚡ 電網設備與基建 (卡脖子核心)", "ETN": "⚡ 電網設備與基建 (卡脖子核心)", "PWR": "⚡ 電網線路工程 (卡脖子核心)",
-    "VRT": "❄️ 機房液冷與散熱 (卡脖子核心)", "MOD": "❄️ 機房液冷與散熱 (卡脖子核心)",
-    "CEG": "☢️ 獨立核能/天然氣發電", "VST": "☢️ 獨立核能/天然氣發電",
-    "ENPH": "☀️ 綠能逆變器與微電網", "SEDG": "☀️ 綠能逆變器與微電網",
-    "NVDA": "AI 晶片 / 半導體設計", "AVGO": "AI 晶片 / 半導體設計", "QCOM": "AI 晶片 / 半導體設計", 
-    "MRVL": "AI 晶片 / 半導體設計", "TXN": "AI 晶片 / 半導體設計", "ADI": "AI 晶片 / 半導體設計", 
-    "ON": "AI 晶片 / 半導體設計", "MPWR": "AI 晶片 / 半導體設計", "NVTS": "AI 晶片 / 半導體設計",
-    "MU": "記憶體與儲存 (HBM/DRAM)", "SNDK": "記憶體與儲存 (HBM/DRAM)", "RMBS": "記憶體與儲存 (HBM/DRAM)", 
-    "DRAM": "記憶體與儲存 (HBM/DRAM)", "SITM": "記憶體與儲存 (HBM/DRAM)",
-    "COHR": "光通訊與網通硬體", "LITE": "光通訊與網通硬體", "AAOI": "光通訊與網通硬體", 
-    "FN": "光通訊與網通硬體", "CIEN": "光通訊與網通硬體", "NOK": "光通訊與網通硬體", 
-    "CBRS": "光通訊與網通硬體", "ANET": "光通訊與網通硬體",
-    "TSM": "晶圓代工與設備製程", "INTC": "晶圓代工與設備製程", "SNPS": "晶圓代工與設備製程", 
-    "TSEM": "晶圓代工與設備製程", "AXTI": "晶圓代工與設備製程", "SIMO": "晶圓代工與設備製程", 
-    "ALAB": "晶圓代工與設備製程", "ASML": "晶圓代工與設備製程",
-    "META": "AI 巨頭 / 軟體平台", "AMZN": "AI 巨頭 / 軟體平台", "MSFT": "AI 巨頭 / 軟體平台", 
-    "AAPL": "AI 巨頭 / 軟體平台", "GOOGL": "AI 巨頭 / 軟體平台", "PLTR": "AI 巨頭 / 軟體平台", 
-    "NOW": "AI 巨頭 / 軟體平台", "ORCL": "AI 巨頭 / 軟體平台", "APP": "AI 巨頭 / 軟體平台", 
-    "NET": "AI 巨頭 / 軟體平台", "CRWV": "AI 巨頭 / 軟體平台",
-    "RDW": "航太、太空與國防", "RKLB": "航太、太空與國防", "ASTS": "航太、太空與國防", "BA": "航太、太空與國防", "ONDS": "航太、太空與國防",
-    "OXY": "傳統能源與礦產", "EQT": "傳統能源與礦產",
-    "TEM": "生技與醫療科技", "GRAL": "生技與醫療科技", "ILMN": "生技與醫療科技",
-    "SOFI": "金融科技與資產管理", "HOOD": "金融科技與資產管理", "GS": "金融科技與資產管理", "BLK": "金融科技與資產管理", "BX": "金融科技與資產管理", "SEI": "金融科技與資產管理",
-    "TSLA": "智能車與新能源", "MSTR": "比特幣與微策略科技", "BRK-B": "價值投資綜合控股 (波克夏)", "SHLD": "其他綜合/特殊題材", "NBIS": "其他綜合/特殊題材",
-    "QQQ": "指數與主題型 ETF", "MAGS": "指數與主題型 ETF", "SOXX": "指數與主題型 ETF", "SMH": "指數與主題型 ETF", "XSD": "指數與主題型 ETF", "GLD": "指數與主題型 ETF"
-}
-
-if "sector_map" not in st.session_state:
-    st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
-
-st.sidebar.header("⚙️ 實時管理股票名單")
-
-with st.sidebar.expander("➕ 新增股票至觀察清單", expanded=False):
-    add_ticker = st.text_input("輸入代碼 (美股如: VRT / 台股如: 2317.TW)").strip().upper()
-    add_sector = st.selectbox("選擇或指定其產業分類", sorted(list(set(st.session_state.sector_map.values()))))
-    if st.button("確認新增"):
-        if add_ticker:
-            st.session_state.sector_map[add_ticker] = add_sector
-            st.toast(f"成功新增 {add_ticker} 進入清單！")
-            st.rerun()
-
-all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-active_tickers = st.sidebar.multiselect("💡 目前觀察清單 (點選 X 可直接刪除)", options=all_current_tickers, default=all_current_tickers)
-
-# 策略參數配置
-st.sidebar.header("📊 波動率與網格參數設定")
-atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
-entry_multiplier = st.sidebar.slider("低吸買進 ATR 倍數", 0.5, 2.5, 1.0, 0.1)
-exit_multiplier = st.sidebar.slider("高拋賣出 ATR 倍數", 0.5, 2.5, 1.5, 0.1)
-
-# 強制拉長歷史追蹤範圍以計算精確的 200MA 生命線
-start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
-
-# 數據容器
-summary_data = []
-action_alerts = []
-
-# 標準排序映射
-rank_map = {"🔥 強烈買進": 0, "🟢 買進": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強烈賣出": 4}
-
-with st.spinner("正在跨系統同步計算指標、網格與 Henry 四大戰法..."):
-    for ticker in active_tickers:
+    def fetch_data(self):
+        """
+        加入完善的異常處理，防止 yfinance 抓不到數據時導致網頁崩潰
+        """
         try:
-            is_tw = ".TW" in ticker or ".TWO" in ticker
-            currency_symbol = "NT$ " if is_tw else "$ "
+            stock = yf.Ticker(self.ticker_str)
+            # 多抓 300 天以利精確計算 200MA 與長天期指標
+            buffer_start = (datetime.strptime(self.start_date, "%Y-%m-%d") - timedelta(days=300)).strftime("%Y-%m-%d")
+            self.df = stock.history(start=buffer_start, end=self.end_date)
+            self.info = stock.info
             
-            stock = yf.Ticker(ticker)
-            df = stock.history(start=start_date)
-            if df.empty or len(df) < 220: # 確保天數大於200天以正確計算 200MA
-                continue
+            if self.df.empty:
+                return False
+            return True
+        except Exception as e:
+            st.error(f"獲取代碼 {self.ticker_str} 數據時發生錯誤: {e}")
+            return False
+
+    def calculate_indicators(self):
+        """
+        第一部分：基礎數據與指標運算 (完全對應 Henry 參數優化)
+        """
+        df = self.df
+        
+        # 1. 均線系統 (MA)
+        df['MA5'] = df['Close'].rolling(window=5).mean()
+        df['MA21'] = df['Close'].rolling(window=21).mean()    # 進出決策線
+        df['MA25'] = df['Close'].rolling(window=25).mean()    # 2560戰法基準線
+        df['MA50'] = df['Close'].rolling(window=50).mean()    # 中期多空線
+        df['MA200'] = df['Close'].rolling(window=200).mean()  # 長期生命線
+
+        # 2. 成交量均量線 (Volume MA)
+        df['Vol_MA5'] = df['Volume'].rolling(window=5).mean()
+        df['Vol_MA60'] = df['Volume'].rolling(window=60).mean() # 2560戰法地量參考線
+
+        # 3. 機構級 MACD (參數: 5, 34, 5)
+        df['EMA5'] = df['Close'].ewm(span=5, adjust=False).mean()
+        df['EMA34'] = df['Close'].ewm(span=34, adjust=False).mean()
+        df['MACD'] = df['EMA5'] - df['EMA34']
+        df['MACD_Signal'] = df['MACD'].ewm(span=5, adjust=False).mean()
+        df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
+
+        # 4. RSI 伏擊參數 (短期 9, 中期 55)
+        df['RSI_9'] = self._compute_rsi(df['Close'], 9)
+        df['RSI_55'] = self._compute_rsi(df['Close'], 55)
+
+        # 5. 乖離率 (BIAS)
+        df['BIAS_5'] = ((df['Close'] - df['MA5']) / df['MA5']) * 100
+        df['BIAS_200'] = ((df['Close'] - df['MA200']) / df['MA200']) * 100
+
+        # 僅保留使用者選擇的日期區間顯示
+        self.df = df.loc[self.start_date:self.end_date]
+
+    def _compute_rsi(self, series, window):
+        delta = series.diff()
+        gain = (delta.clip(lower=0)).rolling(window=window).mean()
+        loss = (-delta.clip(upper=0)).rolling(window=window).mean()
+        rs = gain / loss.replace(0, 0.00001)
+        return 100 - (100 / (1 + rs))
+
+    # ==========================================
+    # 第二部分：核心戰法邏輯診斷 (Strategy Logic)
+    # ==========================================
+    def diagnose_2133(self):
+        """
+        2133 戰法：看懂主力在 21MA 決策線上的防守與突破意圖
+        """
+        df = self.df
+        if len(df) < 3: return "⚪ 數據不足，無法診斷"
+
+        latest = df.iloc[-1]
+        last_3 = df.tail(3)
+
+        # 買入診斷
+        buy_cond_1 = latest['Close'] >= latest['MA21'] * 1.03
+        buy_cond_2 = (last_3['Close'] > last_3['MA21']).all()
+        
+        # 賣出診斷
+        sell_cond_1 = latest['Close'] <= latest['MA21'] * 0.97
+        sell_cond_2 = (last_3['Close'] < last_3['MA21']).all()
+
+        if buy_cond_1 or buy_cond_2:
+            return "🚀 買入訊號：股價已強勢突破 21MA 決策線（高於3%或連續3天站穩），多頭趨勢確立！"
+        elif sell_cond_1 or sell_cond_2:
+            return "🚨 賣出警訊：股價已跌破 21MA 決策線（跌幅超3%或連續3天在線下），建議全面控管風險！"
+        else:
+            return "⚪ 觀望：目前股價在 21MA 附近常態震盪，未出現決定性突破。"
+
+    def diagnose_2560(self):
+        """
+        2560 戰法：尋找主力極致洗盤後的「量價共振」臨界點
+        """
+        df = self.df
+        if len(df) < 10: return "⚪ 數據不足，無法診斷"
+        
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        # 條件 1：價格在 25MA 之上
+        p_above_ma25 = latest['Close'] > latest['MA25']
+        
+        # 條件 2：近期（過去10天內）成交量曾縮至 60日均量線以下（主力洗盤休兵地量）
+        had_low_volume = (df['Volume'].tail(10) < df['Vol_MA60'].tail(10)).any()
+        
+        # 條件 3：5日均量線向上拐頭，且與 60日均量線粘合（進入高度共振擠壓區）
+        vol_ma5_up = latest['Vol_MA5'] > prev['Vol_MA5']
+        vol_binding = abs(latest['Vol_MA5'] - latest['Vol_MA60']) / latest['Vol_MA60'] < 0.12 # 12% 內視為粘合
+
+        if p_above_ma25 and had_low_volume and vol_ma5_up and vol_binding:
+            return "🔥 2560 戰法共振：符合『地量洗盤後拐頭粘合』！主力即將重新點火，建議高度關注發動點！"
+        else:
+            return "⚪ 未觸發：量價結構未達到 2560 戰法的緊密共振臨界狀態。"
+
+    def diagnose_macd_shapes(self):
+        """
+        機構級 MACD 特殊形態識別
+        """
+        df = self.df
+        if len(df) < 5: return "⚪ 數據不足"
+        
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        # 佛手向上：DIF > 0, DEA > 0，快線拉回不破慢線（或短暫死叉後立刻向上開口），柱狀體重新放大
+        if latest['MACD'] > 0 and latest['MACD_Signal'] > 0:
+            if latest['MACD_Hist'] > prev['MACD_Hist'] and prev['MACD_Hist'] <= df['MACD_Hist'].iloc[-3]:
+                return "🌟 佛手向上：機構資金在零軸上方完成洗盤，再度展開多頭主升浪！"
                 
-            # ==========================================
-            # 1. 舊系統指標計算
-            # ==========================================
-            high_low = df['High'] - df['Low']
-            high_cp = (df['High'] - df['Close'].shift(1)).abs()
-            low_cp = (df['Low'] - df['Close'].shift(1)).abs()
-            tr = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1)
-            df['ATR'] = tr.rolling(window=atr_period).mean()
-            
-            delta = df['Close'].diff()
-            gain = (delta.clip(lower=0)).rolling(window=14).mean()
-            loss = (-delta.clip(upper=0)).rolling(window=14).mean()
-            rs = gain / loss.replace(0, 0.00001)
-            df['RSI_14'] = 100 - (100 / (1 + rs))
-            
-            df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
-            df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean()
-            df['MACD_12_26'] = df['EMA12'] - df['EMA26']
-            df['MACD_Sig_9'] = df['MACD_12_26'].ewm(span=9, adjust=False).mean()
-            
-            df['MA20'] = df['Close'].rolling(window=20).mean()
-            df['STD20'] = df['Close'].rolling(window=20).std()
-            df['BB_Upper'] = df['MA20'] + (2 * df['STD20'])
-            df['BB_Lower'] = df['MA20'] - (2 * df['STD20'])
-            
-            df['L9'] = df['Low'].rolling(window=9).min()
-            df['H9'] = df['High'].rolling(window=9).max()
-            df['RSV'] = 100 * ((df['Close'] - df['L9']) / (df['H9'] - df['L9']).replace(0, 0.00001))
-            df['K'] = df['RSV'].ewm(alpha=1/3, adjust=False).mean()
-            df['D'] = df['K'].ewm(alpha=1/3, adjust=False).mean()
-            df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
-
-            # ==========================================
-            # 2. 新增 Henry 指標運算
-            # ==========================================
-            df['MA5'] = df['Close'].rolling(window=5).mean()
-            df['MA21'] = df['Close'].rolling(window=21).mean()
-            df['MA25'] = df['Close'].rolling(window=25).mean()
-            df['MA200'] = df['Close'].rolling(window=200).mean()
-            
-            df['Vol_MA5'] = df['Volume'].rolling(window=5).mean()
-            df['Vol_MA60'] = df['Volume'].rolling(window=60).mean()
-            
-            df['EMA5'] = df['Close'].ewm(span=5, adjust=False).mean()
-            df['EMA34'] = df['Close'].ewm(span=34, adjust=False).mean()
-            df['MACD_Inst'] = df['EMA5'] - df['EMA34']
-            df['MACD_Inst_Sig'] = df['MACD_Inst'].ewm(span=5, adjust=False).mean()
-            df['MACD_Inst_Hist'] = df['MACD_Inst'] - df['MACD_Inst_Sig']
-
-            latest = df.iloc[-1]
-            prev = df.iloc[-2]
-            current_price = float(latest['Close'])
-            prev_close = float(prev['Close'])
-            prev_atr = float(prev['ATR'])
-            
-            low_absorb_price = prev_close - (prev_atr * entry_multiplier)
-            high_toss_price = prev_close + (prev_atr * exit_multiplier)
-            
-            # --- 舊系統 5等燈號判定邏輯 ---
-            bullish_score, bearish_score = 0, 0
-            if latest['RSI_14'] < 36: bullish_score += 1
-            if current_price <= latest['BB_Lower']: bullish_score += 1
-            if prev['K'] <= prev['D'] and latest['K'] > latest['D']: bullish_score += 1
-            if prev['MACD_12_26'] <= prev['MACD_Sig_9'] and latest['MACD_12_26'] > latest['MACD_Sig_9']: bullish_score += 1
-            
-            if latest['RSI_14'] > 66: bearish_score += 1
-            if current_price >= latest['BB_Upper']: bearish_score += 1
-            if prev['K'] >= prev['D'] and latest['K'] < latest['D']: bearish_score += 1
-            if prev['MACD_12_26'] >= prev['MACD_Sig_9'] and latest['MACD_12_26'] < latest['MACD_Sig_9']: bearish_score += 1
-            
-            volume_spike = latest['Volume'] > (latest['Vol_MA20'] * 1.5)
-            
-            old_ind_status = "⚪ 觀望"
-            if bullish_score >= 3 or (bullish_score >= 2 and volume_spike): old_ind_status = "🔥 強烈買進"
-            elif bullish_score >= 1: old_ind_status = "🟢 買進"
-            elif bearish_score >= 3 or (bearish_score >= 2 and volume_spike): old_ind_status = "🚨 強烈賣出"
-            elif bearish_score >= 1: old_ind_status = "🔴 賣出"
-
-            old_atr_status = "⚪ 觀望"
-            if current_price <= low_absorb_price: old_atr_status = "🔥 強烈買進"
-            elif current_price <= low_absorb_price * 1.015: old_atr_status = "🟢 買進"
-            elif current_price >= high_toss_price: old_atr_status = "🚨 強烈賣出"
-            elif current_price >= high_toss_price * 0.985: old_atr_status = "🔴 賣出"
-
-            # --- Henry 戰法判定邏輯 ---
-            # 2133 波段決策
-            buy_2133 = latest['Close'] >= latest['MA21'] * 1.03 or (df['Close'].tail(3) > df['MA21'].tail(3)).all()
-            sell_2133 = latest['Close'] <= latest['MA21'] * 0.97 or (df['Close'].tail(3) < df['MA21'].tail(3)).all()
-            henry_2133 = "🟢 買進" if buy_2133 else ("🔴 賣出" if sell_2133 else "⚪ 觀望")
-
-            # 2560 量價共振
-            p_above_ma25 = latest['Close'] > latest['MA25']
-            had_low_volume = (df['Volume'].tail(10) < df['Vol_MA60'].tail(10)).any()
-            vol_ma5_up = latest['Vol_MA5'] > prev['Vol_MA5']
-            vol_binding = abs(latest['Vol_MA5'] - latest['Vol_MA60']) / latest['Vol_MA60'] < 0.12
-            henry_2560 = "🔥 觸發共振" if (p_above_ma25 and had_low_volume and vol_ma5_up and vol_binding) else "⚪ 觀望"
-
-            # 機構 MACD 型態識別
-            henry_macd_shape = "⚪ 常態"
-            if latest['MACD_Inst'] > 0 and latest['MACD_Inst_Sig'] > 0:
-                if latest['MACD_Inst_Hist'] > prev['MACD_Inst_Hist'] and prev['MACD_Inst_Hist'] <= df['MACD_Inst_Hist'].iloc[-3]:
-                    henry_macd_shape = "🌟 佛手向上"
-            if prev['MACD_Inst'] <= prev['MACD_Inst_Sig'] and latest['MACD_Inst'] > latest['MACD_Inst_Sig'] and latest['MACD_Inst'] < 0:
-                henry_macd_shape = "🦆 小鴨出水"
-
-            # 只要任何一方觸發關鍵訊號，送入警告面板
-            if "買進" in old_ind_status or "買進" in old_atr_status or henry_2133 == "🟢 買進" or henry_2560 == "🔥 觸發共振" or "🌟" in henry_macd_shape or "🦆" in henry_macd_shape:
-                action_alerts.append({
-                    "代碼": ticker, "舊指標決策": old_ind_status, "舊網格決策": old_atr_status,
-                    "Henry 2133": henry_2133, "Henry 2560": henry_2560, "機構MACD型態": henry_macd_shape,
-                    "最新價": f"{currency_symbol}{current_price:.2f}"
-                })
-
-            summary_data.append({
-                "產業領域": st.session_state.sector_map.get(ticker, "未分類"), "代碼": ticker, "最新收盤價": f"{currency_symbol}{current_price:.2f}",
-                "舊指標決策": old_ind_status, "舊網格決策": old_atr_status, "Henry 2133": henry_2133, "Henry 2560": henry_2560, "機構MACD型態": henry_macd_shape,
-                "建議低吸價": f"{currency_symbol}{low_absorb_price:.2f}", "建議高拋價": f"{currency_symbol}{high_toss_price:.2f}"
-            })
-        except Exception:
-            pass
+        # 小鴨出水：DIF 與 DEA 在零軸下方低位金叉後，快線（DIF）向零軸爬升，形態如小鴨冒出水面
+        if prev['MACD'] <= prev['MACD_Signal'] and latest['MACD'] > latest['MACD_Signal']:
+            if latest['MACD'] < 0:
+                return "🦆 小鴨出水：築底結束！快線在零軸下黃金交叉，屬於極具爆發力的底部反轉訊號。"
+                
+        return "⚪ 常態訊號：MACD 目前未呈現特殊主力籌碼型態。"
 
 # ==========================================
-# 前端畫面排版 (UI Layout 大融合)
+# 第三部分：前端介面佈局 (UI Layout)
 # ==========================================
+st.set_page_config(layout="wide", page_title="Henry 秒懂美股實戰策略儀表板")
+st.title("📈 「Henry 秒懂美股」實戰策略分析儀表板")
+st.markdown("本工具完美移植 Henry 經典量化戰法，透過多維度技術指標共振與基本面篩選，助您抓準進出場 Action。")
 
-# 【第一層：🚨 今日核心交易行動警告區】
-st.header("🚨 今日綜合核心交易行動面板 (Action Panel)")
-if action_alerts:
-    alert_df = pd.DataFrame(action_alerts)
-    st.dataframe(alert_df, use_container_width=True, hide_index=True)
-else:
-    st.info("🧘 今日各大系統均無特殊交易提示，請繼續安心保持觀望。")
+# --- 側邊欄配置 (Sidebar) ---
+st.sidebar.header("⚙️ 實戰策略配置面板")
+ticker_input = st.sidebar.text_input("輸入美股代碼 (例如: NVDA, AAPL, TSLA)", "NVDA")
 
-st.markdown("---")
+col_date1, col_date2 = st.sidebar.columns(2)
+with col_date1:
+    start_d = st.date_input("開始日期", datetime.now() - timedelta(days=120))
+with col_date2:
+    end_d = st.date_input("結束日期", datetime.now())
 
-# 【第二層：📊 完整產業雙系統量化大清單】
-st.header("📊 雙系統綜合量化大清單 (指標、網格、Henry戰法支援)")
-if summary_data:
-    summary_df = pd.DataFrame(summary_data)
-    summary_df['sort_1'] = summary_df['舊指標決策'].map(rank_map)
-    summary_df['sort_2'] = summary_df['舊網格決策'].map(rank_map)
-    summary_df['final_sort'] = summary_df[['sort_1', 'sort_2']].min(axis=1)
-    summary_df = summary_df.sort_values(by=["final_sort", "產業領域", "代碼"]).drop(['sort_1', 'sort_2', 'final_sort'], axis=1)
-    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎯 選取欲診斷的 Henry 戰法")
+check_2133 = st.sidebar.checkbox("2133 波段決策戰法", value=True)
+check_2560 = st.sidebar.checkbox("2560 量價共振戰法", value=True)
+check_macd = st.sidebar.checkbox("機構級 MACD 特殊型態", value=True)
 
-st.markdown("---")
+# 實戰止盈輔助輸入
+st.sidebar.subheader("💰 個人持倉成本設定 (333止盈用)")
+user_cost = st.sidebar.number_input("您的買入平均成本價 ($)", value=0.0, min_value=0.0)
 
-# 【第三層：🔍 個股深度雙軌通道與 Henry 指標大視覺化】
-st.header("🔍 個股深度技術面、基本面與籌碼催化劑分析")
-selected_stock = st.selectbox("選擇你想查看的個股細節：", sorted(active_tickers))
-
-if selected_stock:
-    try:
-        is_tw = ".TW" in selected_stock or ".TWO" in selected_stock
-        currency_label = "新台幣" if is_tw else "美元"
+# --- 核心程式執行邏輯 ---
+if ticker_input:
+    analyzer = HenryStockAnalyzer(ticker_input, start_d.strftime("%Y-%m-%d"), end_d.strftime("%Y-%m-%d"))
+    
+    with st.spinner("正在向華爾街調閱即時數據並計算 Henry 指標偏好..."):
+        success = analyzer.fetch_data()
         
-        stock_detail = yf.Ticker(selected_stock)
-        # 用於畫圖的詳細數據重新抓取
-        df_detail = stock_detail.history(start=start_date)
+    if success:
+        analyzer.calculate_indicators()
+        df = analyzer.df
+        latest_data = df.iloc[-1]
         
-        if not df_detail.empty and len(df_detail) > 200:
-            # 重新計算繪圖用均線與布林
-            df_detail['MA21'] = df_detail['Close'].rolling(window=21).mean()
-            df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
-            df_detail['MA20'] = df_detail['Close'].rolling(window=20).mean()
-            df_detail['STD20'] = df_detail['Close'].rolling(window=20).std()
-            df_detail['BB_Upper'] = df_detail['MA20'] + (2 * df_detail['STD20'])
-            df_detail['BB_Lower'] = df_detail['MA20'] - (2 * df_detail['STD20'])
-            
-            # Henry 均量與機構 MACD
-            df_detail['Vol_MA5'] = df_detail['Volume'].rolling(window=5).mean()
-            df_detail['Vol_MA60'] = df_detail['Volume'].rolling(window=60).mean()
-            df_detail['EMA5'] = df_detail['Close'].ewm(span=5, adjust=False).mean()
-            df_detail['EMA34'] = df_detail['Close'].ewm(span=34, adjust=False).mean()
-            df_detail['MACD_Inst'] = df_detail['EMA5'] - df_detail['EMA34']
-            df_detail['MACD_Inst_Sig'] = df_detail['MACD_Inst'].ewm(span=5, adjust=False).mean()
-            df_detail['MACD_Inst_Hist'] = df_detail['MACD_Inst'] - df_detail['MACD_Inst_Sig']
-            
-            # 💡 建立 Henry 規格之三列聯動高階圖表
-            fig = make_subplots(
-                rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05, 
-                row_heights=[0.5, 0.2, 0.3],
-                subplot_titles=("K線主圖 (融合舊布林下軌支撐 + Henry 21MA決策線/200MA生命線)", "2560 戰法量能監控 (5日與60日均量線)", "Henry 機構級 MACD (5, 34, 5) 能量潮")
-            )
-            
-            # 主圖
-            fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['BB_Upper'], name='舊系統布林上軌', line=dict(color='rgba(255,165,0,0.4)', width=1.5)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['BB_Lower'], name='舊系統布林下軌', line=dict(color='rgba(0,191,255,0.4)', width=1.5)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA21'], name='Henry 21MA 決策線', line=dict(color='orange', width=2.5)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='⚠️ Henry 200MA 生命線', line=dict(color='crimson', width=3.5)), row=1, col=1)
-            
-            # 副圖一
-            fig.add_trace(go.Bar(x=df_detail.index, y=df_detail['Volume'], name='成交量', marker_color='rgba(128,128,128,0.5)'), row=2, col=1)
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['Vol_MA5'], name='5日均量線', line=dict(color='orange', width=1.5)), row=2, col=1)
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['Vol_MA60'], name='60日均量地量線', line=dict(color='purple', width=2)), row=2, col=1)
-            
-            # 副圖二
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MACD_Inst'], name='機構快線', line=dict(color='dodgerblue', width=1.5)), row=3, col=1)
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MACD_Inst_Sig'], name='機構慢線', line=dict(color='tomato', width=1.5)), row=3, col=1)
-            colors = ['rgba(235, 71, 71, 0.7)' if val >= 0 else 'rgba(71, 235, 115, 0.7)' for val in df_detail['MACD_Inst_Hist']]
-            fig.add_trace(go.Bar(x=df_detail.index, y=df_detail['MACD_Inst_Hist'], name='能量柱', marker_color=colors), row=3, col=1)
-            
-            fig.update_layout(height=800, xaxis_rangeslider_visible=False, template="plotly_white")
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # 💡 Henry 3+1 潛力股財務基本面看板
-            st.subheader("🧱 Henry 3+1 潛力股核心基本面診斷")
-            info = stock_detail.info
-            if info:
-                col_f1, col_f2, col_f3 = st.columns(3)
-                net_margin = info.get('netIncomeToCommon', 0) / info.get('totalRevenue', 1) if info.get('netIncomeToCommon') else 0
-                current_ratio = info.get('currentRatio', 0)
-                pe_ratio = info.get('trailingPE', "無資料")
-                
-                col_f1.metric("公司淨利率 (Net Profit Margin)", f"{net_margin * 100:.2f}%")
-                col_f2.metric("流動比率 (Current Ratio)", f"{current_ratio:.2f}", "✅ 安全" if current_ratio > 1.5 else "⚠️ 偏低")
-                col_f3.metric("當前 PE 估值 (Trailing P/E)", f"{pe_ratio}")
-                st.info("💡 **【第 +1 項指標提示 — 企業護城河 (Moat)】**：量化數據僅代表歷史成績，建倉前請務必自行評估其技術代際壁壘（如 TSMC 的晶圓領先地位）與品牌轉換成本。")
+        # ------------------------------------------
+        # 核心功能：行動告警板 (Action Panel)
+        # ------------------------------------------
+        st.header("🚨 今日即時行動告警板 (Action Panel)")
+        
+        # 顯示 2133 診斷
+        if check_2133:
+            res_2133 = analyzer.diagnose_2133()
+            if "🚀" in res_2133:
+                st.success(f"**【2133 波段戰法】** {res_2133}")
+            elif "🚨" in res_2133:
+                st.error(f"**【2133 波段戰法】** {res_2133}")
             else:
-                st.write("該個股（如台股或部分標的）暫無線上 info 財務數據。")
+                st.warning(f"**【2133 波段戰法】** {res_2133}")
+
+        # 顯示 2560 診斷
+        if check_2560:
+            res_2560 = analyzer.diagnose_2560()
+            if "🔥" in res_2560:
+                st.success(f"**【2560 量價共振】** {res_2560}")
+            else:
+                st.info(f"**【2560 量價共振】** {res_2560}")
                 
-            # 舊系統籌碼與新聞
-            st.markdown("---")
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                st.subheader("🕵️‍♂️ 公司內部人交易動向 (Insider)")
-                if is_tw: st.info("台股籌碼請參閱公開資訊觀測站。")
-                else:
-                    try:
-                        insider_df = stock_detail.insider_transactions
-                        if insider_df is not None and not insider_df.empty:
-                            st.dataframe(insider_df[['Start Date', 'Insider', 'Position', 'Transaction', 'Shares', 'Value']].head(6), use_container_width=True)
-                        else: st.write("近期無內部人大幅交易申報。")
-                    except Exception: st.write("無法調閱美股內部人數據。")
-            with col_d2:
-                st.subheader("📰 影響股價的最新市場消息")
-                try:
-                    news_list = stock_detail.news
-                    if news_list:
-                        for article in news_list[:3]:
-                            st.markdown(f"**[{article.get('title', '無標題')}]({article.get('link', '#')})**")
-                            st.caption(f"來源: {article.get('publisher', '未知')}")
-                except Exception: st.write("暫時無法獲取實時新聞。")
-    except Exception as e:
-        st.error(f"深度分析載入失敗: {e}")
+        # 顯示 MACD 特殊型態
+        if check_macd:
+            res_shapes = analyzer.diagnose_macd_shapes()
+            if "🌟" in res_shapes or "🦆" in res_shapes:
+                st.success(f"**【機構級 MACD 型態】** {res_shapes}")
+            else:
+                st.info(f"**【機構級 MACD 型態】** {res_shapes}")
+
+        # 伏擊指標即時資訊快報
+        st.markdown("##### 🔍 伏擊指標即時數據快報")
+        col_i1, col_i2, col_i3, col_i4 = st.columns(4)
+        col_i1.metric("RSI_9 短期伏擊值", f"{latest_data['RSI_9']:.2f}", "超買臨界: 75" if latest_data['RSI_9'] > 75 else "")
+        col_i2.metric("RSI_55 中期防守值", f"{latest_data['RSI_55']:.2f}")
+        col_i3.metric("5日 均線乖離率 (BIAS)", f"{latest_data['BIAS_5']:.2f}%")
+        col_i4.metric("200日 生命線乖離率", f"{latest_data['BIAS_200']:.2f}%")
+
+        # 自動化止盈提醒功能
+        if user_cost > 0:
+            current_return = (latest_data['Close'] - user_cost) / user_cost
+            st.markdown("##### 📈 333 與 532 策略動態止盈指南")
+            if current_return >= 0.25:
+                st.error(f"⚠️ **【333 止盈警告】** 目前帳面回報已高達 {current_return*100:.1f}%！已跨越 25% 強烈止盈線，請切實執行分批減倉，落袋為安！")
+            elif current_return >= 15:
+                st.warning(f"⚠️ **【333 止盈提醒】** 目前帳面回報達 {current_return*100:.1f}%（超過 15% 基準線），建議啟動第一階段減倉紀律。")
+            else:
+                st.info(f"ℹ️ 目前帳面報酬率為 {current_return*100:.1f}%，尚未觸發 333 止盈減倉門檻。")
+            st.caption("💡 **【532 時間止盈提醒】** 若近期有重大總體經濟消息（如聯準會 FOMC 利率決議、核心 CPI 公布），請務必具備防守抽水意識，提前回收部分流動性。")
+
+        st.markdown("---")
+
+        # ------------------------------------------
+        # 視覺化：主圖表與副圖整合區域 (Charts Area)
+        # ------------------------------------------
+        st.header(f"📊 {analyzer.ticker_str} 戰法視覺化動態通道")
+        
+        # 建立三列的 Plotly 聯動圖表
+        fig = make_subplots(
+            rows=3, cols=1, 
+            shared_xaxes=True, 
+            vertical_spacing=0.04, 
+            row_heights=[0.5, 0.2, 0.3],
+            subplot_titles=(f"K線與均線決策系統", "2560 戰法成交量量能監控", "機構級 MACD (5, 34, 5) 能量潮")
+        )
+
+        # 副圖一：K 線圖與五大均線系統
+        fig.add_trace(go.Candlestick(
+            x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name="K線"
+        ), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], name="5MA 攻防線", line=dict(color='gray', width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA21'], name="21MA 進出決策線", line=dict(color='orange', width=2)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA25'], name="25MA 2560基準線", line=dict(color='cyan', width=1.5, dash='dash')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA50'], name="50MA 中期多空線", line=dict(color='blue', width=1.5)), row=1, col=1)
+        # 顯眼色強調 200 日長期生命線
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA200'], name="⚠️ 200MA 長期生命線", line=dict(color='crimson', width=3)), row=1, col=1)
+
+        # 副圖二：成交量與 5/60日均量線
+        fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name="當日成交量", marker_color='rgba(100, 149, 237, 0.6)'), row=2, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['Vol_MA5'], name="5日均量線", line=dict(color='orange', width=1.5)), row=2, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['Vol_MA60'], name="60日均量地量線", line=dict(color='purple', width=2)), row=2, col=1)
+
+        # 副圖三：機構級 MACD
+        fig.add_trace(go.Scatter(x=df.index, y=df['MACD'], name="DIF 快線", line=dict(color='dodgerblue', width=1.5)), row=3, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MACD_Signal'], name="DEA 慢線", line=dict(color='tomato', width=1.5)), row=3, col=1)
+        
+        # 繪製 MACD 紅綠柱狀體
+        colors = ['rgba(235, 71, 71, 0.8)' if val >= 0 else 'rgba(71, 235, 115, 0.8)' for val in df['MACD_Hist']]
+        fig.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], name='柱狀體', marker_color=colors), row=3, col=1)
+
+        # 佈局美化
+        fig.update_layout(
+            height=850,
+            xaxis_rangeslider_visible=False,
+            template="plotly_white",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("---")
+
+        # ------------------------------------------
+        # 核心功能：3+1 潛力股基本面篩選面板
+        # ------------------------------------------
+        st.header("🧱 3+1 潛力股核心基本面診斷面板")
+        
+        info = analyzer.info
+        if info:
+            col_f1, col_f2, col_f3 = st.columns(3)
+            
+            # 財務指標安全性過濾
+            net_margin = info.get('netIncomeToCommon', 0) / info.get('totalRevenue', 1) if info.get('netIncomeToCommon') else 0
+            current_ratio = info.get('currentRatio', 0)
+            pe_ratio = info.get('trailingPE', "無資料")
+            
+            with col_f1:
+                st.metric("公司淨利率 (Net Profit Margin)", f"{net_margin * 100:.2f}%")
+                st.caption("💡 Henry 實戰心法：淨利率需高於同業平均水準，代表公司在產業鏈中擁有強大的定價權。")
+                
+            with col_f2:
+                status_cr = "✅ 安全" if current_ratio > 1.5 else "⚠️ 偏低"
+                st.metric("流動比率 (Current Ratio)", f"{current_ratio:.2f}", help="需大於 1.5")
+                st.caption(f"目前狀態：{status_cr}（Henry 指標：流動比率 > 1.5 代表短期償債防禦力極佳）。")
+                
+            with col_f3:
+                st.metric("當前 PE 估值 (Trailing P/E)", f"{pe_ratio}")
+                st.caption("💡 估值需結合當前產業增長率，避免在瘋狂泡沫期追入高 PE 的股票。")
+
+            # 第「+1」項指標：護城河 (Moat)
+            st.info("💡 **【Henry 核心提醒：不可忽視的第 +1 項指標 — 企業護城河 (Moat)】**\n\n"
+                    "量化數據只能代表過去的成績單，請您在建倉前務必自行評估該企業的『質化護城河』："
+                    "例如該公司是否具備巨大的**技術代際壁壘**（如 ASML、TSMC）、**高昂的用戶轉換成本**（如 MSFT 商業生態），"
+                    "或**無可取代的品牌壟斷溢價**（如 AAPL）。唯有兼具高淨利率與強大護城河，才是能抱得住的 3+1 頂級標的。")
+        else:
+            st.warning("無法從伺服器取得該公司的基本面 info 財務數據，請手動至財經網站比對。")
+
+    else:
+        st.error("❌ 查無此美股代碼或無法讀取數據，請確認代碼是否輸入正確（如：NVDA, TSLA）。")
