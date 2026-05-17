@@ -60,8 +60,8 @@ active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)"
 # ATR 自訂網格參數
 st.sidebar.header("📊 ATR 網格參數 (自訂高拋低吸)")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
-entry_multiplier = st.sidebar.slider("低吸買進 ATR 倍數", 0.5, 2.5, 1.0, 0.1)
-exit_multiplier = st.sidebar.slider("高拋賣出 ATR 倍數", 0.5, 2.5, 1.5, 0.1)
+entry_multiplier = st.sidebar.slider("低吸買進 ATR 倍數", 0.5, 3.5, 1.5, 0.1)
+exit_multiplier = st.sidebar.slider("高拋賣出 ATR 倍數", 0.5, 3.5, 1.5, 0.1)
 
 start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
 
