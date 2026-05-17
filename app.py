@@ -5,9 +5,9 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # 1. 網頁基本設定
-st.set_page_config(layout="wide", page_title="美股多指標共振與即時行動警告系統")
-st.title("🦅 美股五等量化訊號與 ATR 低吸高拋導航系統")
-st.markdown("本系統已全面將欄位統一為 **每日建議行動**，並嚴格遵循五個等級指示，方便快速篩選執行 Action。")
+st.set_page_config(layout="wide", page_title="美股指標趨勢與網格波段雙軌導航系統")
+st.title("🦅 美股指標趨勢 vs 網格波段雙軌導航系統")
+st.markdown("本系統將決策拆解為**『指標趨勢決策』**與**『網格波段決策』**，雙軌並行，助您明晰每筆交易的獲利邏輯。")
 
 # 2. 內建核心產業與「卡脖子」供應鏈地圖
 INITIAL_SECTOR_MAP = {
@@ -38,7 +38,6 @@ INITIAL_SECTOR_MAP = {
     "QQQ": "指數與主題型 ETF", "MAGS": "指數與主題型 ETF", "SOXX": "指數與主題型 ETF", "SMH": "指數與主題型 ETF", "XSD": "指數與主題型 ETF", "GLD": "指數與主題型 ETF"
 }
 
-# 3. 實時動態增減股票邏輯
 if "sector_map" not in st.session_state:
     st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
 
@@ -53,33 +52,25 @@ with st.sidebar.expander("➕ 新增股票至觀察清單", expanded=False):
             st.toast(f"成功新增 {add_ticker} 進入清單！")
             st.rerun()
 
-all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
+all_current_tickers = sorted(list(st.session_state.session_state.sector_map.keys() if "sector_map" in st.session_state else INITIAL_SECTOR_MAP.keys()))
 active_tickers = st.sidebar.multiselect("💡 目前觀察清單 (點選 X 可直接刪除)", options=all_current_tickers, default=all_current_tickers)
 
 # 策略參數配置
-st.sidebar.header("📊 波動率參數設定")
+st.sidebar.header("📊 波動率與電網參數設定")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
-entry_multiplier = st.sidebar.slider("低吸買進 ATR 倍數 (最新價減幾倍)", 0.5, 2.5, 1.0, 0.1)
-exit_multiplier = st.sidebar.slider("高拋賣出 ATR 倍數 (最新價加幾倍)", 0.5, 2.5, 1.5, 0.1)
+entry_multiplier = st.sidebar.slider("低吸買進 ATR 倍數", 0.5, 2.5, 1.0, 0.1)
+exit_multiplier = st.sidebar.slider("高拋賣出 ATR 倍數", 0.5, 2.5, 1.5, 0.1)
 days_back = st.sidebar.number_input("追蹤歷史天數", value=180, min_value=60)
 start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
 
-# 導讀專區
-with st.expander("💡 華爾街最新 AI 基礎建設『卡脖子』前沿趨勢導讀", expanded=False):
-    st.markdown("""
-    * **電網與變壓器荒**：全美資料中心因電力短缺卡關。**龍頭標的**：`GEV`, `ETN`, `PWR`，核電獨立發電商 `CEG`, `VST`。
-    * **高密度液冷轉折點**：新世代晶片功耗飆破物理極限，全面強制轉向液冷。**龍頭標的**：全球液冷龍頭 `VRT`、散熱黑馬 `MOD`。
-    * **分散式綠能微電網**：科技巨頭推動機房自我綠能發電。**龍頭標的**：微型逆變器大廠 `ENPH`, `SEDG`。
-    """)
-
-# 核心數據儲存器
+# 數據容器
 summary_data = []
 action_alerts = []
 
-# 定義嚴格的訊號階層排序映射
+# 五等標準排序映射
 rank_map = {"🔥 強烈買進": 0, "🟢 買進": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強烈賣出": 4}
 
-with st.spinner("正在即時計算五等量化指標與篩選 ACTION 訊號..."):
+with st.spinner("正在即時拆解指標趨勢與網格波段數據..."):
     for ticker in active_tickers:
         try:
             stock = yf.Ticker(ticker)
@@ -87,7 +78,7 @@ with st.spinner("正在即時計算五等量化指標與篩選 ACTION 訊號..."
             if df.empty or len(df) < 35:
                 continue
                 
-            # --- 技術指標計算 ---
+            # --- 技術數據計算 ---
             high_low = df['High'] - df['Low']
             high_cp = (df['High'] - df['Close'].shift(1)).abs()
             low_cp = (df['Low'] - df['Close'].shift(1)).abs()
@@ -115,107 +106,128 @@ with st.spinner("正在即時計算五等量化指標與篩選 ACTION 訊號..."
             df['RSV'] = 100 * ((df['Close'] - df['L9']) / (df['H9'] - df['L9']).replace(0, 0.00001))
             df['K'] = df['RSV'].ewm(alpha=1/3, adjust=False).mean()
             df['D'] = df['K'].ewm(alpha=1/3, adjust=False).mean()
-            
             df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
             
             latest = df.iloc[-1]
             prev = df.iloc[-2]
+            
             current_price = float(latest['Close'])
-            atr_val = float(latest['ATR'])
+            prev_close = float(prev['Close'])
+            prev_atr = float(prev['ATR'])
             
-            # --- ATR 動態點位擬訂 ---
-            low_absorb_price = current_price - (atr_val * entry_multiplier)
-            high_toss_price = current_price + (atr_val * exit_multiplier)
+            # --- 🛠️ 軌道計算優化：以昨日收盤為基礎建立今日定價網格邊界 ---
+            low_absorb_price = prev_close - (prev_atr * entry_multiplier)
+            high_toss_price = prev_close + (prev_atr * exit_multiplier)
             
-            # --- 五等量化計分系統 ---
+            # ==========================================
+            # 軌道一：技術指標決策 (KD/MACD/RSI/布林共振)
+            # ==========================================
             bullish_score = 0
             bearish_score = 0
             
-            if latest['RSI'] < 38: bullish_score += 1
+            if latest['RSI'] < 36: bullish_score += 1
             if current_price <= latest['BB_Lower']: bullish_score += 1
             if prev['K'] <= prev['D'] and latest['K'] > latest['D']: bullish_score += 1
             if prev['MACD'] <= prev['MACD_Signal'] and latest['MACD'] > latest['MACD_Signal']: bullish_score += 1
             
-            if latest['RSI'] > 68: bearish_score += 1
+            if latest['RSI'] > 66: bearish_score += 1
             if current_price >= latest['BB_Upper']: bearish_score += 1
             if prev['K'] >= prev['D'] and latest['K'] < latest['D']: bearish_score += 1
             if prev['MACD'] >= prev['MACD_Signal'] and latest['MACD'] < latest['MACD_Signal']: bearish_score += 1
             
             volume_spike = latest['Volume'] > (latest['Vol_MA20'] * 1.5)
             
-            # 決定五個標準等級
-            action_status = "⚪ 觀望"
-            reason_str = ""
+            ind_status = "⚪ 觀望"
+            ind_reason = "指標處於中性震盪區間。"
             
             if bullish_score >= 3 or (bullish_score >= 2 and volume_spike):
-                action_status = "🔥 強烈買進"
-                reason_str = "指標低檔強烈共振，且主力資金爆量開火，右側噴發訊號強烈！"
-            elif bullish_score == 2 or abs(current_price - low_absorb_price) / current_price <= 0.015:
-                action_status = "🟢 買進"
-                if abs(current_price - low_absorb_price) / current_price <= 0.015:
-                    reason_str = "股價已精準拉回到 ATR 動態低吸埋伏位，適合左側分批布局。"
-                else:
-                    reason_str = "技術指標觸底回升，具備初步止跌反彈動能。"
+                ind_status = "🔥 強烈買進"
+                ind_reason = f"四大技術指標出現低位多頭共振 (得分:{bullish_score}/4)，主力帶量開火！"
+            elif bullish_score >= 1:
+                ind_status = "🟢 買進"
+                ind_reason = f"技術指標初步見底回升 (得分:{bullish_score}/4)，動能微幅轉強。"
             elif bearish_score >= 3 or (bearish_score >= 2 and volume_spike):
-                action_status = "🚨 強烈賣出"
-                reason_str = "指標高檔死叉共振且爆量滯漲，多頭動能耗盡，強烈建議高拋獲利。"
-            elif bearish_score == 2 or abs(current_price - high_toss_price) / current_price <= 0.015:
-                action_status = "🔴 賣出"
-                if abs(current_price - high_toss_price) / current_price <= 0.015:
-                    reason_str = "股價已推升至 ATR 動態高拋壓力位，觸及預設短線獲利目標。"
-                else:
-                    reason_str = "技術指標超買死叉，上行空間受阻，建議適度減碼。"
+                ind_status = "🚨 強烈賣出"
+                ind_reason = f"四大技術指標高檔嚴重超買並出現死叉 (得分:{bearish_score}/4)，動能耗盡。"
+            elif bearish_score >= 1:
+                ind_status = "🔴 賣出"
+                ind_reason = f"技術指標高位滯漲轉弱 (得分:{bearish_score}/4)，上行遭受壓制。"
 
-            # 如果觸發非觀望訊號，加入頂部 Action 警告
-            if action_status != "⚪ 觀望":
+            # ==========================================
+            # 軌道二：網格波段決策 (ATR 空間定價)
+            # ==========================================
+            atr_status = "⚪ 觀望"
+            atr_reason = "股價處於網格合理震盪中樞，未觸及極端拋吸位。"
+            
+            if current_price <= low_absorb_price:
+                atr_status = "🔥 強烈買進"
+                atr_reason = "股價已完全跌破昨日設定之 ATR 動態低吸價，網格觸發強力買入紀律。"
+            elif current_price <= low_absorb_price * 1.015:
+                atr_status = "🟢 買進"
+                atr_reason = "股價已逼近 ATR 低吸埋伏位 (1.5%以內)，進入預設左側分批布局區。"
+            elif current_price >= high_toss_price:
+                atr_status = "🚨 強烈賣出"
+                atr_reason = "股價已強力突破昨日設定之 ATR 動態高拋價，達到網格極端獲利區，強力高拋。"
+            elif current_price >= high_toss_price * 0.985:
+                atr_status = "🔴 賣出"
+                atr_reason = "股價已逼近 ATR 高拋獲利位 (1.5%以內)，達到波段網格落袋為安區。"
+
+            # 只要任一軌道有訊號，就送入今日核心交易行動
+            if ind_status != "⚪ 觀望" or atr_status != "⚪ 觀望":
                 action_alerts.append({
                     "代碼": ticker,
-                    "每日建議行動": action_status,
-                    "最新價": f"${current_price:.2f}",
-                    "關鍵原因": reason_str
+                    "指標趨勢決策": ind_status,
+                    "網格波段決策": atr_status,
+                    "最新收盤價": f"${current_price:.2f}",
+                    "指標警示原因": ind_reason,
+                    "網格警示原因": atr_reason
                 })
 
             summary_data.append({
                 "產業領域": st.session_state.sector_map.get(ticker, "未分類"),
                 "代碼": ticker,
                 "最新收盤價": f"${current_price:.2f}",
-                "每日建議行動": action_status,
-                "共振多/空分": f"多:{bullish_score} | 空:{bearish_score}",
+                "指標趨勢決策": ind_status,
+                "網格波段決策": atr_status,
                 "量能爆發": "⚠️ 爆量" if volume_spike else "正常",
                 "建議低吸價 (買點)": f"${low_absorb_price:.2f}",
                 "建議高拋價 (賣點)": f"${high_toss_price:.2f}",
-                "RSI": f"{latest['RSI']:.1f}"
+                "共振得分": f"多:{bullish_score} | 空:{bearish_score}"
             })
         except Exception:
             pass
 
-# --- 畫面呈現與排版 ---
+# --- 畫面呈現排版 ---
 
 # 【第一層：🚨 今日核心交易行動警告區】
-st.header("🚨 今日核心交易行動 (Action Alerts)")
+st.header("🚨 今日雙軌核心交易行動 (Action Alerts)")
 if action_alerts:
     alert_df = pd.DataFrame(action_alerts)
-    # 按強烈買進 -> 買進 -> 賣出 -> 強烈賣出排序
-    alert_df['sort_order'] = alert_df['每日建議行動'].map(rank_map)
-    alert_df = alert_df.sort_values('sort_order').drop('sort_order', axis=1)
+    # 排序邏輯：優先處理有「強烈」訊號的個股
+    alert_df['sort_1'] = alert_df['指標趨勢決策'].map(rank_map)
+    alert_df['sort_2'] = alert_df['網格波段決策'].map(rank_map)
+    alert_df['final_sort'] = alert_df[['sort_1', 'sort_2']].min(axis=1)
+    alert_df = alert_df.sort_values('final_sort').drop(['sort_1', 'sort_2', 'final_sort'], axis=1)
     st.dataframe(alert_df, use_container_width=True, hide_index=True)
 else:
-    st.info("🧘 今日無任何個股觸發臨界點，請保持觀察，繼續按兵不動觀望。")
+    st.info("🧘 今日趨勢指標與網格軌道皆無觸發邊界，請繼續安心抱股觀望。")
 
 st.markdown("---")
 
-# 【第二層：📊 完整產業五等訊號清單】
-st.header("📊 完整產業五等訊號清單")
+# 【第二層：📊 完整產業雙軌訊號清單】
+st.header("📊 完整產業雙軌量化清單")
 if summary_data:
     summary_df = pd.DataFrame(summary_data)
-    summary_df['rank'] = summary_df['每日建議行動'].map(rank_map)
-    summary_df = summary_df.sort_values(by=["rank", "產業領域", "代碼"]).drop('rank', axis=1)
+    summary_df['sort_1'] = summary_df['指標趨勢決策'].map(rank_map)
+    summary_df['sort_2'] = summary_df['網格波段決策'].map(rank_map)
+    summary_df['final_sort'] = summary_df[['sort_1', 'sort_2']].min(axis=1)
+    summary_df = summary_df.sort_values(by=["final_sort", "產業領域", "代碼"]).drop(['sort_1', 'sort_2', 'final_sort'], axis=1)
     st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
 # 【第三層：🔍 個股深度通道視覺化】
-st.header("🔍 個股動態低吸高拋通道分析")
+st.header("🔍 個股動態雙軌通道分析")
 selected_stock = st.selectbox("選擇你想查看的個股細節：", sorted(active_tickers))
 
 if selected_stock:
@@ -230,9 +242,9 @@ if selected_stock:
             
             fig = go.Figure()
             fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['BB_Upper'], name='布林上軌 (高檔壓力線)', line=dict(color='rgba(255, 165, 0, 0.6)', width=1.5)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['BB_Upper'], name='布林上軌 (指標超買線)', line=dict(color='rgba(255, 165, 0, 0.6)', width=1.5)))
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20'], name='20MA生命線', line=dict(color='rgba(128, 128, 128, 0.5)', width=1)))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['BB_Lower'], name='布林下軌 (低檔支撐線)', line=dict(color='rgba(0, 191, 255, 0.6)', width=1.5)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['BB_Lower'], name='布林下軌 (指標超賣線)', line=dict(color='rgba(0, 191, 255, 0.6)', width=1.5)))
             
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格 (美元)", height=400)
             st.plotly_chart(fig, use_container_width=True)
