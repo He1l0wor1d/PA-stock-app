@@ -52,7 +52,7 @@ with st.sidebar.expander("➕ 新增股票至觀察清單", expanded=False):
             st.toast(f"成功新增 {add_ticker} 進入清單！")
             st.rerun()
 
-all_current_tickers = sorted(list(st.session_state.session_state.sector_map.keys() if "sector_map" in st.session_state else INITIAL_SECTOR_MAP.keys()))
+all_current_tickers = sorted(list(st.session_state.sector_map.keys() if "sector_map" in st.session_state else INITIAL_SECTOR_MAP.keys()))
 active_tickers = st.sidebar.multiselect("💡 目前觀察清單 (點選 X 可直接刪除)", options=all_current_tickers, default=all_current_tickers)
 
 # 策略參數配置
