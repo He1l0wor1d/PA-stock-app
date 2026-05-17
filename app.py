@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
@@ -57,7 +57,7 @@ with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
 
-# ✨ 核心修正：將買入與賣出係數合併為唯一的自定義係數 x，達成完美對稱網格
+# 對稱網格參數
 st.sidebar.header("📊 對稱網格參數設定")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 2.5, 1.2, 0.1, help="買入與賣出將完全對稱向外擴展 x * ATR")
@@ -81,7 +81,7 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             if df.empty or len(df) < 220:
                 continue
                 
-            # 幕後運算
+            # 幕後運算指標
             high_low = df['High'] - df['Low']
             high_cp = (df['High'] - df['Close'].shift(1)).abs()
             low_cp = (df['Low'] - df['Close'].shift(1)).abs()
@@ -103,13 +103,13 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
 
             latest = df.iloc[-1]
             prev = df.iloc[-2]
-            current_price = float(latest['Close'])
-            prev_close = float(prev['Close'])
-            prev_atr = float(prev['ATR'])
+            current_price = float(latest['Close'])  # 週末時代表上週五收盤價
+            prev_close = float(prev['Close'])      # 週末時代表上週四收盤價
+            latest_atr = float(latest['ATR'])
             
-            # ✨ 核心計算：完全對稱的網格邊界
-            low_absorb_price = prev_close - (prev_atr * atr_multiplier)
-            high_toss_price = prev_close + (prev_atr * atr_multiplier)
+            # ✨ 核心修正：直接以上週五的收盤價（最新結算價）為對稱中心推算星期一開盤網格
+            low_absorb_price = current_price - (latest_atr * atr_multiplier)
+            high_toss_price = current_price + (latest_atr * atr_multiplier)
             
             market_state = "⚪ 觀望"
             final_action = "⚪ 觀望"
@@ -122,53 +122,39 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             # 軌道一：趨勢會漲 (Price 在 21MA 與 200MA 生命線之上)
             if current_price >= latest['MA21'] and latest['MA21'] >= latest['MA200']:
                 market_state = "📈 多頭波段 (會漲)"
-                if current_price <= low_absorb_price:
-                    final_action = "🔥 強力買入"
-                    reason_str = f"多頭強勢股極致回檔，跌破對稱網格下限 (-{atr_multiplier}x ATR)，極佳低點埋伏機會！"
-                elif abs(current_price - latest['MA21'])/latest['MA21'] <= 0.02:
+                if abs(current_price - latest['MA21'])/latest['MA21'] <= 0.02:
                     final_action = "🟢 買入"
-                    reason_str = "多頭波段拉回到關鍵 21MA 決策線重要支撐區，符合穩定建倉邏輯。"
-                elif current_price >= high_toss_price or current_price >= latest['BB_Upper']:
+                    reason_str = "多頭波段拉回到關鍵 21MA 決策線重要支撐區，符合『低點埋伏點』建倉邏輯。"
+                elif current_price >= latest['BB_Upper']:
                     final_action = "🔴 賣出"
-                    reason_str = f"短線噴發過熱，已衝破對稱網格上限 (+{atr_multiplier}x ATR)，高拋鎖定利潤。"
+                    reason_str = "短線多頭噴發嚴重超買、觸及布林上軌，建議波段高拋鎖定利潤。"
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = "多頭結構健全穩定，未達極佳埋伏位，持股者請安心抱牢。"
+                    reason_str = f"多頭結構健全，已為您計算星期一開盤之對稱低吸位 {currency_symbol}{low_absorb_price:.2f}，未到請安心持股。"
                     
             # 軌道二：趨勢會跌 (Price 跌破生命線與決策線)
             elif current_price < latest['MA21'] and current_price < latest['MA200']:
                 market_state = "📉 空頭結構 (會跌)"
                 if prev_close >= latest['MA21'] and current_price < latest['MA21']:
                     final_action = "🚨 強力賣出"
-                    reason_str = "今日正式跌破 21MA 決策線，趨勢正式轉空，請果斷停利/停損離場，拒絕接飛刀。"
-                elif current_price >= high_toss_price:
-                    final_action = "🔴 賣出"
-                    reason_str = f"空頭弱勢反彈觸及對稱網格上限 (+{atr_multiplier}x ATR)，屬於紀律性逃命高拋點。"
-                elif latest['RSI_14'] < 28 or current_price <= low_absorb_price:
-                    final_action = "🟢 買入"
-                    reason_str = f"空頭結構下砸到極端超賣區或跌破網格下限 (-{atr_multiplier}x ATR)，具備短線超跌反彈空間，限極小倉位試探。"
+                    reason_str = "剛破 21MA 決策線，趨勢轉空，請果斷執行防守離場紀律，拒絕接飛刀。"
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = "空頭下跌走勢中，屬於『不碰族群』，堅決保持空倉觀望。"
+                    reason_str = "空頭下跌結構中，屬於『不碰族群』，堅決保持空倉觀望。"
                     
             # 軌道三：趨勢會震盪 (箱型橫盤)
             else:
                 market_state = "↕️ 箱型震盪 (會震盪)"
-                if current_price <= low_absorb_price:
+                # 盤中即時動態比對
+                if current_price <= low_absorb_price * 1.005 and current_price >= low_absorb_price * 0.995:
                     final_action = "🔥 強力買入"
-                    reason_str = f"精準跌破自訂對稱網格下限 (-{atr_multiplier}x ATR)，觸發網格絕對低吸紀律。"
-                elif current_price <= low_absorb_price * 1.015:
-                    final_action = "🟢 買入"
-                    reason_str = "股價已逼近對稱網格低吸區 (1.5%以內)，適合左側分批埋伏。"
-                elif current_price >= high_toss_price:
+                    reason_str = f"精準觸及最新對稱網格下限 (-{atr_multiplier}x ATR)，低吸買入。"
+                elif current_price >= high_toss_price * 0.995 and current_price <= high_toss_price * 1.005:
                     final_action = "🚨 強力賣出"
-                    reason_str = f"精準突破自訂對稱網格上限 (+{atr_multiplier}x ATR)，觸發網格絕對高拋紀律。"
-                elif current_price >= high_toss_price * 0.985:
-                    final_action = "🔴 賣出"
-                    reason_str = "股價已逼近對稱網格高拋區 (1.5%以內)，波段分批高拋落袋。"
+                    reason_str = f"精準觸及最新對稱網格上限 (+{atr_multiplier}x ATR)，高拋賣出。"
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = "處於箱型網格平衡中樞，無須頻繁操作，靜待觸及網格邊界。"
+                    reason_str = f"處於箱型震盪中樞。星期一開盤自訂對稱網格：低吸買點 {currency_symbol}{low_absorb_price:.2f} | 高拋賣點 {currency_symbol}{high_toss_price:.2f}。"
 
             if final_action != "⚪ 觀望":
                 action_alerts.append({
@@ -193,7 +179,6 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             pass
 
 # --- 介面排版輸出 ---
-
 st.header("🚨 今日核心執行 ACTION 面板")
 if action_alerts:
     alert_df = pd.DataFrame(action_alerts)
