@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
 # 1. 網頁基本設定
-st.set_page_config(layout="wide", title="Henry & 雙軌降維極簡導航系統")
+st.set_page_config(layout="wide", page_title="Henry & 雙軌降維極簡導航系統")
 st.title("🦅 美股+台股『極簡降維』自動化決策導航系統")
 st.markdown("本系統已剔除所有密密麻麻的矛盾指標，將多空結構簡化為**三大狀態**，直接給予最純粹的 **ACTION 綜合建議**。")
 
