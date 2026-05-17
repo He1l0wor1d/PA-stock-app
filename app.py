@@ -6,9 +6,9 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
 # 1. 網頁基本設定
-st.set_page_config(layout="wide", page_title="Henry & 雙軌降維極簡導航系統")
-st.title("🦅 美股+台股『極簡降維』自動化決策導航系統")
-st.markdown("本系統已剔除所有密密麻麻的矛盾指標，將多空結構簡化為**三大狀態**，直接給予最純粹的 **ACTION 綜合建議**。")
+st.set_page_config(layout="wide", page_title="Henry & 雙軌降維五等決策系統")
+st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
+st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並嚴格限制為 **五個標準 Action 等級**。")
 
 # 2. 內建核心產業與「卡脖子」供應鏈地圖 (台美股綜合)
 INITIAL_SECTOR_MAP = {
@@ -25,7 +25,7 @@ INITIAL_SECTOR_MAP = {
     "COHR": "光通訊與網通硬體", "LITE": "光通訊與網通硬體", "AAOI": "光通訊與網通硬體", 
     "FN": "光通訊與網通硬體", "CIEN": "光通訊與網通硬體", "NOK": "光通訊與網通硬體", 
     "CBRS": "光通訊與網通硬體", "ANET": "光通訊與網通硬體",
-    "TSM": "晶圓代工與設備製程", "INTC": "晶圓代工與設備製程", "SNPS": "晶圓代打與設備製程", 
+    "TSM": "晶圓代工與設備製程", "INTC": "晶圓代工與設備製程", "SNPS": "晶圓代工與設備製程", 
     "TSEM": "晶圓代工與設備製程", "AXTI": "晶圓代工與設備製程", "SIMO": "晶圓代工與設備製程", 
     "ALAB": "晶圓代工與設備製程", "ASML": "晶圓代工與設備製程",
     "META": "AI 巨頭 / 軟體平台", "AMZN": "AI 巨頭 / 軟體平台", "MSFT": "AI 巨頭 / 軟體平台", 
@@ -57,20 +57,21 @@ with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
 
-# ATR 自訂網格參數 (保留讓您可以自己設定)
+# ATR 自訂網格參數
 st.sidebar.header("📊 ATR 網格參數 (自訂高拋低吸)")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
 entry_multiplier = st.sidebar.slider("低吸買進 ATR 倍數", 0.5, 2.5, 1.0, 0.1)
 exit_multiplier = st.sidebar.slider("高拋賣出 ATR 倍數", 0.5, 2.5, 1.5, 0.1)
 
-# 拉長歷史數據以利幕後運算生命線
 start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
 
-# 容器
 summary_data = []
 action_alerts = []
 
-with st.spinner("正在為您過濾繁雜雜訊，提煉核心 ACTION..."):
+# 五等標準排序映射 (讓強烈買進排最前，強烈賣出排最後，中間夾觀望)
+action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
+
+with st.spinner("正在提煉五等核心 ACTION 決策中..."):
     for ticker in active_tickers:
         try:
             is_tw = ".TW" in ticker or ".TWO" in ticker
@@ -81,7 +82,7 @@ with st.spinner("正在為您過濾繁雜雜訊，提煉核心 ACTION..."):
             if df.empty or len(df) < 220:
                 continue
                 
-            # --- 幕後計算核心指標 (前台隱藏，只取結果) ---
+            # 幕後運算核心指標
             high_low = df['High'] - df['Low']
             high_cp = (df['High'] - df['Close'].shift(1)).abs()
             low_cp = (df['Low'] - df['Close'].shift(1)).abs()
@@ -95,64 +96,88 @@ with st.spinner("正在為您過濾繁雜雜訊，提煉核心 ACTION..."):
             df['BB_Upper'] = df['MA20'] + (2 * df['STD20'])
             df['BB_Lower'] = df['MA20'] - (2 * df['STD20'])
             
+            delta = df['Close'].diff()
+            gain = (delta.clip(lower=0)).rolling(window=14).mean()
+            loss = (-delta.clip(upper=0)).rolling(window=14).mean()
+            rs = gain / loss.replace(0, 0.00001)
+            df['RSI_14'] = 100 - (100 / (1 + rs))
+
             latest = df.iloc[-1]
             prev = df.iloc[-2]
             current_price = float(latest['Close'])
             prev_close = float(prev['Close'])
             prev_atr = float(prev['ATR'])
             
-            # 自訂網格邊界
+            # 網格定價
             low_absorb_price = prev_close - (prev_atr * entry_multiplier)
             high_toss_price = prev_close + (prev_atr * exit_multiplier)
             
+            # 默認初始狀態
+            market_state = "⚪ 觀望"
+            final_action = "⚪ 觀望"
+            reason_str = "未觸及任何策略臨界點。"
+
             # ==========================================
-            # 🧠 核心降維邏輯：定義三大市場狀態與最終 Action
+            # 🧠 核心降維邏輯：對齊五等決策紅綠燈
             # ==========================================
-            # 狀態 A：會漲 (Price 在 21MA 與 200MA 生命線之上)
+            
+            # 軌道一：趨勢會漲 (Price 在 21MA 與 200MA 生命線之上)
             if current_price >= latest['MA21'] and latest['MA21'] >= latest['MA200']:
                 market_state = "📈 多頭波段 (會漲)"
-                # 決策：低點埋伏
-                if current_price <= low_absorb_price or abs(current_price - latest['MA21'])/latest['MA21'] <= 0.02:
-                    final_action = "🟢 買進"
-                    reason_str = "多頭趨勢回檔至 21MA 決策線或網格下限，符合『低點埋伏』建倉機會。"
+                if current_price <= low_absorb_price:
+                    final_action = "🔥 強力買入"
+                    reason_str = "多頭趨勢股極致拉回到網格低吸上限以下，屬於勝率極高的『低點埋伏點』。"
+                elif abs(current_price - latest['MA21'])/latest['MA21'] <= 0.02:
+                    final_action = "🟢 買入"
+                    reason_str = "多頭波段回檔至 21MA 決策線重要支撐區，符合『右側低點埋伏』。"
                 elif current_price >= latest['BB_Upper']:
                     final_action = "🔴 賣出"
-                    reason_str = "短線多頭噴發過熱、觸及布林上軌，建議高拋鎖定波段利潤。"
+                    reason_str = "短線多頭噴發嚴重超買、觸及布林上軌，波段『高拋』鎖定利潤。"
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = "多頭結構健全，未達埋伏點，持股者請安心抱牢。"
+                    reason_str = "多頭結構健全穩定，未達極佳埋伏位，持股者請安心抱牢。"
                     
-            # 狀態 B：會跌 (Price 跌破生命線或決策線向下走弱)
+            # 軌道二：趨勢會跌 (Price 跌破生命線與決策線)
             elif current_price < latest['MA21'] and current_price < latest['MA200']:
                 market_state = "📉 空頭結構 (會跌)"
-                # 決策：不碰、空倉或迅速離場
                 if prev_close >= latest['MA21'] and current_price < latest['MA21']:
-                    final_action = "🔴 賣出"
-                    reason_str = "剛破 21MA 決策線，趨勢轉空，執行右側防守離場紀律。"
-                else:
-                    final_action = "⚪ 觀望"
-                    reason_str = "結構走弱，屬於『不碰族群』，堅決空倉耐心等待築底。"
-                    
-            # 狀態 C：會震盪 (夾在均線群中間，或通道收窄)
-            else:
-                market_state = "↕️ 箱型震盪 (會震盪)"
-                # 決策：執行自訂 ATR 網格高拋低吸
-                if current_price <= low_absorb_price:
-                    final_action = "🟢 買進"
-                    reason_str = "觸及您設定的 ATR 動態低吸價，網格買入信號觸發。"
+                    final_action = "🚨 強力賣出"
+                    reason_str = "今日正式跌破 21MA 決策線，多轉空結構確立，請果斷離場、拒絕接飛刀。"
                 elif current_price >= high_toss_price:
                     final_action = "🔴 賣出"
-                    reason_str = "觸及您設定的 ATR 動態高拋價，網格獲利賣出信號觸發。"
+                    reason_str = "空頭結構下無量反彈至 ATR 網格上限，屬於弱勢逃命高拋點。"
+                elif latest['RSI_14'] < 28:
+                    final_action = "🟢 買入"
+                    reason_str = "空頭結構下出現極端恐慌超賣 (RSI<28)，短線具備超跌反彈空間，限極小倉位試探。"
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = "處於箱型網格中樞，無須頻繁操作，靜待觸及網格邊界。"
+                    reason_str = "空頭 Grinding 下跌中，屬於『不碰族群』，堅決保持空倉觀望。"
+                    
+            # 軌道三：趨勢會震盪 (夾在均線群中間，無明顯方向)
+            else:
+                market_state = "↕️ 箱型震盪 (會震盪)"
+                if current_price <= low_absorb_price:
+                    final_action = "🔥 強力買入"
+                    reason_str = "精準觸及您自訂的 ATR 箱型下限，網格低吸買入紀律觸發。"
+                elif current_price <= low_absorb_price * 1.015:
+                    final_action = "🟢 買入"
+                    reason_str = "股價已逼近 ATR 網格低吸區 (1.5%以內)，左側分批低吸埋伏。"
+                elif current_price >= high_toss_price:
+                    final_action = "🚨 強力賣出"
+                    reason_str = "精準突破您自訂的 ATR 箱型上限，網格高拋賣出紀律觸發。"
+                elif current_price >= high_toss_price * 0.985:
+                    final_action = "🔴 賣出"
+                    reason_str = "股價已逼近 ATR 網格高拋區 (1.5%以內)，波段分批高拋落袋。"
+                else:
+                    final_action = "⚪ 觀望"
+                    reason_str = "處於箱型網格平衡中樞，無須頻繁操作，靜待邊界警報。"
 
-            # 只要有非觀望的動作，送進核心 Action 面板
+            # 只要不是觀望，就推送至今日即時行動
             if final_action != "⚪ 觀望":
                 action_alerts.append({
                     "代碼": ticker,
-                    "市場狀態": market_state,
                     "綜合建議 (ACTION)": final_action,
+                    "市場狀態": market_state,
                     "最新收盤價": f"{currency_symbol}{current_price:.2f}",
                     "精簡決策原因": reason_str
                 })
@@ -170,10 +195,7 @@ with st.spinner("正在為您過濾繁雜雜訊，提煉核心 ACTION..."):
         except Exception:
             pass
 
-# --- 降維介面完美呈現 ---
-
-# 優先級排序映射
-action_rank = {"🟢 買進": 0, "🔴 賣出": 1, "⚪ 觀望": 2}
+# --- 介面排版輸出 ---
 
 # 【第一層：🚨 今日核心交易行動 (Action Alerts) 】
 st.header("🚨 今日核心執行 ACTION 面板")
@@ -183,12 +205,12 @@ if action_alerts:
     alert_df = alert_df.sort_values('sort').drop('sort', axis=1)
     st.dataframe(alert_df, use_container_width=True, hide_index=True)
 else:
-    st.info("🧘 報告隊長：今日 60 多隻股票中皆無個股觸發臨界點。請保持耐心，繼續按兵不動觀望。")
+    st.info("🧘 報告隊長：今日 60 多隻股票中皆無個股觸發臨界點。請繼續安心保持觀望。")
 
 st.markdown("---")
 
 # 【第二層：📊 降維極簡總覽大清單】
-st.header("📊 降維極簡大看板 (拒絕指標衝突)")
+st.header("📊 降維極簡大看板 (標準五等紅綠燈)")
 if summary_data:
     summary_df = pd.DataFrame(summary_data)
     summary_df['sort'] = summary_df['綜合建議 (ACTION)'].map(action_rank)
@@ -218,7 +240,7 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
-            # Henry 3+1 基本面提煉
+            # 基本面快照
             info = stock_detail.info
             if info:
                 col_f1, col_f2, col_f3 = st.columns(3)
@@ -231,7 +253,6 @@ if selected_stock:
                 col_f3.metric("當前 PE 估值", f"{pe_ratio}")
                 
             st.markdown("---")
-            # 實時新聞
             try:
                 news_list = stock_detail.news
                 if news_list:
