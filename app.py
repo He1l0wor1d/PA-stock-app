@@ -202,12 +202,12 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
                 "產業領域": st.session_state.sector_map.get(ticker, "未分類"),
                 "代碼": ticker,
                 "當前股價": f"{currency_symbol}{current_price:.2f}",
-                "昨日收盤價": f"{currency_symbol}{yesterday_close:.2f}",
-                "20日均線(20MA)": f"{currency_symbol}{ma20_center:.2f}",
+                "昨收盤價": f"{currency_symbol}{yesterday_close:.2f}",
+                "MA20": f"{currency_symbol}{ma20_center:.2f}",
                 "市場狀態": market_state,
                 "綜合建議 (ACTION)": final_action,
-                "自訂低吸買點": f"{currency_symbol}{low_absorb_price:.2f}",
-                "自訂高拋賣點": f"{currency_symbol}{high_toss_price:.2f}",
+                "買點": f"{currency_symbol}{low_absorb_price:.2f}",
+                "賣點": f"{currency_symbol}{high_toss_price:.2f}",
                 "精簡決策原因": reason_str
             })
         except Exception:
