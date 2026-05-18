@@ -1,17 +1,3 @@
-這是一次非常專業的策略調校！將網格交易的中心價從「最新收盤價」改為 **「20日均線 (20MA)」**，在量化交易中具有非常重要的實戰意義：
-
-* 20MA 代表過去一個月市場的**平均持倉成本（生命線）**。
-* 以 20MA 為中心向外推算 $\pm x \times \text{ATR}$，算出來的低吸與高拋點才是統計學上真正的「均值回歸（Mean Reversion）」極值點。這能幫你徹底避開股價在極端暴漲或暴跌時，網格中心點跟著被拉扯移位的盲區！
-
-我已經依照您的訴求，將中心價全面改為 20MA，並把表格中的「最新收盤價」更正為 **「當前股價」**，其餘所有的技術邏輯與置頂股票均維持原封不動。
-
----
-
-### 💻 均值回歸網格版 `app.py` 完整原始碼
-
-請直接複製下方完整的程式碼，全選覆蓋您 GitHub 上的 `app.py` 檔案：
-
-```python
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -284,5 +270,3 @@ if selected_stock:
             except Exception: pass
     except Exception as e:
         st.error(f"分析載入失敗: {e}")
-
-```
