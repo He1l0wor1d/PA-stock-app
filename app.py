@@ -110,6 +110,7 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             
             df['MA21'] = df['Close'].rolling(window=21).mean()
             df['MA200'] = df['Close'].rolling(window=200).mean()
+            
             df['MA20'] = df['Close'].rolling(window=20).mean()
             df['STD20'] = df['Close'].rolling(window=20).std()
             df['BB_Upper'] = df['MA20'] + (2 * df['STD20'])
@@ -190,7 +191,7 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             if final_action != "⚪ 觀望":
                 action_alerts.append({
                     "代碼": ticker,
-                    "綜合建議 (ACTION)": final_action,
+                    "綜合建議": final_action,
                     "市場狀態": market_state,
                     "當前股價": f"{currency_symbol}{current_price:.2f}",
                     "昨日收盤價": f"{currency_symbol}{yesterday_close:.2f}",
@@ -217,7 +218,7 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
 st.header("🚨 今日核心執行 ACTION 面板")
 if action_alerts:
     alert_df = pd.DataFrame(action_alerts)
-    alert_df['sort'] = alert_df['綜合建議 (ACTION)'].map(action_rank)
+    alert_df['sort'] = alert_df['綜合建議'].map(action_rank)
     alert_df = alert_df.sort_values('sort').drop('sort', axis=1)
     st.dataframe(alert_df, use_container_width=True, hide_index=True)
 else:
@@ -228,7 +229,7 @@ st.markdown("---")
 st.header("📊 降維極簡大看板 (標準五等紅綠燈)")
 if summary_data:
     summary_df = pd.DataFrame(summary_data)
-    summary_df['sort'] = summary_df['綜合建議 (ACTION)'].map(action_rank)
+    summary_df['sort'] = summary_df['綜合建議'].map(action_rank)
     summary_df = summary_df.sort_values(by=["sort", "產業領域", "代碼"]).drop('sort', axis=1)
     st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
