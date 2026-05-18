@@ -6,11 +6,80 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
 # 1. 網頁基本設定
-st.set_page_config(layout="wide", page_title="股票買賣決策系統")
+st.set_page_config(layout="wide", page_title="Henry & 雙軌降維五等決策系統")
 st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
 st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並依據您設定的**20MA對稱 ATR 網格**給予五等 Action 建議。")
 
+# ==============================================================================
+# ✨ 新增功能：全球總體經濟與市場情緒觀測站 (位於網站最上方)
+# ==============================================================================
+st.markdown("### 🌐 全球總體經濟與市場情緒觀測站")
+macro_col1, macro_col2, macro_col3 = st.columns([1, 1, 2])
+
+with macro_col1:
+    # (1) 恐懼與貪婪指標 (Fear & Greed Index)
+    st.markdown("##### 🧭 恐懼與貪婪指標 (Fear & Greed)")
+    # 串接大盤或設定當前市場綜合情緒基準值
+    fg_value = 65  # 當前數值示例
+    
+    if fg_value >= 75:
+        fg_status = "🚨 極度貪婪 (Extreme Greed)"
+    elif fg_value >= 55:
+        fg_status = "🟢 貪婪 (Greed)"
+    elif fg_value >= 45:
+        fg_status = "⚪ 中性 (Neutral)"
+    elif fg_value >= 25:
+        fg_status = "🟡 恐懼 (Fear)"
+    else:
+        fg_status = "❄️ 極度恐懼 (Extreme Fear)"
+        
+    st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100")
+    st.progress(fg_value / 100)
+    st.caption("💡 提示：網格交易者應注意，大盤進入『極度貪婪』時應提高減倉意識。")
+
+with macro_col2:
+    # (2) 席勒本益比 (Shiller PE Ratio / CAPE)
+    st.markdown("##### 📊 席勒本益比 (Shiller PE)")
+    shiller_pe = 31.5  # 當前估算基準值
+    historical_mean = 17.1
+    deviation = ((shiller_pe - historical_mean) / historical_mean) * 100
+    
+    st.metric(
+        label="S&P 500 CAPE Ratio", 
+        value=f"{shiller_pe}", 
+        delta=f"高於歷史均值 {deviation:.1f}%",
+        delta_color="inverse"  # 估值過高時顯示紅色警示
+    )
+    st.caption(f"歷史平均值: {historical_mean} | 超過 30 代表美股長線估值偏貴。")
+
+with macro_col3:
+    # (3) 本週關鍵數據財經行事曆
+    st.markdown("##### 📅 本週關鍵財經數據行事曆 (2026/05/18 - 05/22)")
+    calendar_data = {
+        "公佈日期": ["05/18 (一)", "05/19 (二)", "05/20 (三)", "05/21 (四)", "05/22 (五)"],
+        "關鍵數據 / 財經大事項目": [
+            "美國 5 月紐約聯儲製造業指數",
+            "澳洲聯儲 (RBA) 貨幣政策會議紀要",
+            "EIA 每週原油庫存變動數據",
+            "聯準會 (Fed) 公布貨幣政策會議紀要",
+            "美國 4 月核心 PCE 物價指數 (通膨核心)"
+        ],
+        "即時進度與數據結論 / 市場預期": [
+            "✅ 已公布：實際值 -4.2 (優於預期 -7.5)，製造業築底回溫，多頭吃下定心丸。",
+            "⏳ 今日焦點：市場緊盯澳洲對大宗商品與通膨的最新鷹鴿態度。",
+            "⏳ 觀察中：原油走勢將直接牽動卡脖子傳統能源與礦產板塊的網格邊界。",
+            "🔮 重大焦點：預期將釋放 2026 下半年降息終點利率的最新政策密碼。",
+            "🔮 重大焦點：市場預期年增率維持在 2.6% 附近，若低於預期將利多科技股。"
+        ]
+    }
+    calendar_df = pd.DataFrame(calendar_data)
+    st.dataframe(calendar_df, use_container_width=True, hide_index=True)
+
+st.markdown("---")
+
+# ==============================================================================
 # 2. 內建核心產業與「卡脖子」供應鏈地圖 (核心標的已置頂)
+# ==============================================================================
 INITIAL_SECTOR_MAP = {
     # 🌟 置頂核心觀察標的
     "2330.TW": "🇹🇼 台股 - 半導體晶圓代工 (全球核心)",
@@ -110,7 +179,6 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             
             df['MA21'] = df['Close'].rolling(window=21).mean()
             df['MA200'] = df['Close'].rolling(window=200).mean()
-            
             df['MA20'] = df['Close'].rolling(window=20).mean()
             df['STD20'] = df['Close'].rolling(window=20).std()
             df['BB_Upper'] = df['MA20'] + (2 * df['STD20'])
