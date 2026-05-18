@@ -205,7 +205,7 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
                 "昨收盤價": f"{currency_symbol}{yesterday_close:.2f}",
                 "MA20": f"{currency_symbol}{ma20_center:.2f}",
                 "市場狀態": market_state,
-                "綜合建議 (ACTION)": final_action,
+                "綜合建議": final_action,
                 "買點": f"{currency_symbol}{low_absorb_price:.2f}",
                 "賣點": f"{currency_symbol}{high_toss_price:.2f}",
                 "精簡決策原因": reason_str
