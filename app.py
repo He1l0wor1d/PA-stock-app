@@ -80,7 +80,7 @@ active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)"
 # 對稱網格參數設定
 st.sidebar.header("📊 對稱網格參數設定")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
-atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 2.5, 1.2, 0.1, help="將以 20MA 為中心對稱向外擴展 x * ATR")
+atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 2.5, 1.4, 0.1, help="將以 20MA 為中心對稱向外擴展 x * ATR")
 
 start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
 
