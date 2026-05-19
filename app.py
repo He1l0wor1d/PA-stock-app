@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # 1. 網頁基本設定
 st.set_page_config(layout="wide", page_title="股票決策系統")
 st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
-st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並依據您設定的**20MA對稱 ATR 網格**給予五等 Action 建議。")
+st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並依據您設定的**MA20對稱 ATR 網格**給予五等 Action 建議。")
 
 # ==============================================================================
 # ✨ 新增功能：全球總體經濟與市場情緒觀測站 (位於網站最上方)
@@ -149,7 +149,7 @@ active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)"
 # 對稱網格參數設定
 st.sidebar.header("📊 對稱網格參數設定")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
-atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 2.5, 1.4, 0.1, help="將以 20MA 為中心對稱向外擴展 x * ATR")
+atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 2.5, 1.4, 0.1, help="將以 MA20 為中心對稱向外擴展 x * ATR")
 
 start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
 
@@ -198,7 +198,7 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             ma20_center = float(latest['MA20'])
             latest_atr = float(latest['ATR'])
             
-            # 以 20日線 (20MA) 為中心計算對稱網格邊界
+            # 以 20日線 (MA20) 為中心計算對稱網格邊界
             low_absorb_price = ma20_center - (latest_atr * atr_multiplier)
             high_toss_price = ma20_center + (latest_atr * atr_multiplier)
             
@@ -210,34 +210,34 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             # 🧠 核心降維邏輯：對齊五等決策紅綠燈
             # ==========================================
             
-            # 軌道一：趨勢會漲 (Price 在 21MA 與 200MA 生命線之上)
+            # 軌道一：趨勢會漲 (Price 在 MA20 與 200MA 生命線之上)
             if current_price >= latest['MA20'] and latest['MA20'] >= latest['MA200']:
                 market_state = "📈 多頭波段 (會漲)"
                 if current_price <= low_absorb_price:
                     final_action = "🔥 強力買入"
-                    reason_str = f"多頭強勢股拉回過深，跌破 20MA 對稱網格下限 (-{atr_multiplier}x ATR)，黃金埋伏機會！"
+                    reason_str = f"多頭強勢股拉回過深，跌破 MA20 對稱網格下限 (-{atr_multiplier}x ATR)，黃金埋伏機會！"
                 elif abs(current_price - latest['MA20'])/latest['MA20'] <= 0.02:
                     final_action = "🟢 買入"
-                    reason_str = "多頭波段拉回到關鍵 21MA 決策線重要支撐區，符合穩定建倉邏輯。"
+                    reason_str = "多頭波段拉回到關鍵 MA20 決策線重要支撐區，符合穩定建倉邏輯。"
                 elif current_price >= high_toss_price or current_price >= latest['BB_Upper']:
                     final_action = "🔴 賣出"
-                    reason_str = f"短線噴發過熱，已衝破 20MA 對稱網格上限 (+{atr_multiplier}x ATR)，波段高拋。"
+                    reason_str = f"短線噴發過熱，已衝破 MA20 對稱網格上限 (+{atr_multiplier}x ATR)，波段高拋。"
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = f"多頭結構健全，已為您計算最新 20MA 低吸位 {currency_symbol}{low_absorb_price:.2f}，未到請安心持股。"
+                    reason_str = f"多頭結構健全，已為您計算最新 MA20 低吸位 {currency_symbol}{low_absorb_price:.2f}，未到請安心持股。"
                     
             # 軌道二：趨勢會跌 (Price 跌破生命線與決策線)
             elif current_price < latest['MA20'] and current_price < latest['MA200']:
                 market_state = "📉 空頭結構 (會跌)"
                 if yesterday_close >= latest['MA20'] and current_price < latest['MA20']:
                     final_action = "🚨 強力賣出"
-                    reason_str = "剛破 21MA 決策線，趨勢轉空，請果斷執行防守離場紀律，拒絕接飛刀。"
+                    reason_str = "剛破 MA20 決策線，趨勢轉空，請果斷執行防守離場紀律，拒絕接飛刀。"
                 elif current_price >= high_toss_price:
                     final_action = "🔴 賣出"
-                    reason_str = f"空頭弱勢反彈觸及 20MA 對稱網格上限 (+{atr_multiplier}x ATR)，屬於紀律性逃命高拋點。"
+                    reason_str = f"空頭弱勢反彈觸及 MA20 對稱網格上限 (+{atr_multiplier}x ATR)，屬於紀律性逃命高拋點。"
                 elif latest['RSI_14'] < 28 or current_price <= low_absorb_price:
                     final_action = "🟢 買入"
-                    reason_str = f"空頭結構下砸到極端超賣區或跌破 20MA 網格下限 (-{atr_multiplier}x ATR)，限極小倉位短線試探。"
+                    reason_str = f"空頭結構下砸到極端超賣區或跌破 MA20 網格下限 (-{atr_multiplier}x ATR)，限極小倉位短線試探。"
                 else:
                     final_action = "⚪ 觀望"
                     reason_str = "空頭下跌結構中，屬於『不碰族群』，堅決保持空倉觀望。"
@@ -247,15 +247,15 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
                 market_state = "↕️ 箱型震盪 (會震盪)"
                 if current_price <= low_absorb_price * 1.005 and current_price >= low_absorb_price * 0.995:
                     final_action = "🔥 強力買入"
-                    reason_str = f"精準觸及 20MA 對稱網格下限 (-{atr_multiplier}x ATR)，網格低吸買入。"
+                    reason_str = f"精準觸及 MA20 對稱網格下限 (-{atr_multiplier}x ATR)，網格低吸買入。"
                 elif current_price >= high_toss_price * 0.995 and current_price <= high_toss_price * 1.005:
                     final_action = "🚨 強力賣出"
-                    reason_str = f"精準觸及 20MA 對稱網格上限 (+{atr_multiplier}x ATR)，網格高拋賣出。"
+                    reason_str = f"精準觸及 MA20 對稱網格上限 (+{atr_multiplier}x ATR)，網格高拋賣出。"
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = f"處於箱型震盪中樞。最新 20MA 對稱網格：低吸買點 {currency_symbol}{low_absorb_price:.2f} | 高拋賣點 {currency_symbol}{high_toss_price:.2f}。"
+                    reason_str = f"處於箱型震盪中樞。最新 MA20 對稱網格：低吸買點 {currency_symbol}{low_absorb_price:.2f} | 高拋賣點 {currency_symbol}{high_toss_price:.2f}。"
 
-            # 新增「昨日收盤價」與「20日均線(20MA)」數據到面板中
+            # 新增「昨日收盤價」與「20日均線(MA20)」數據到面板中
             if final_action != "⚪ 觀望":
                 action_alerts.append({
                     "代碼": ticker,
@@ -263,7 +263,7 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
                     "市場狀態": market_state,
                     "當前股價": f"{currency_symbol}{current_price:.2f}",
                     "昨日收盤價": f"{currency_symbol}{yesterday_close:.2f}",
-                    "20日均線(20MA)": f"{currency_symbol}{ma20_center:.2f}",
+                    "20日均線(MA20)": f"{currency_symbol}{ma20_center:.2f}",
                     "精簡決策原因": reason_str
                 })
 
@@ -317,7 +317,7 @@ if selected_stock:
             
             fig = go.Figure()
             fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20'], name='21MA 趨勢決策線', line=dict(color='orange', width=2.5)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20'], name='MA20 趨勢決策線', line=dict(color='orange', width=2.5)))
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=3)))
             
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
