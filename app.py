@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 
 # 1. 網頁基本設定
-st.set_page_config(layout="wide", page_title="股市決策系統")
+st.set_page_config(layout="wide", page_title="股票決策系統")
 st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
 st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並依據您設定的**20MA對稱 ATR 網格**給予五等 Action 建議。")
 
@@ -177,7 +177,7 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             tr = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1)
             df['ATR'] = tr.rolling(window=atr_period).mean()
             
-            df['MA21'] = df['Close'].rolling(window=21).mean()
+            df['MA20'] = df['Close'].rolling(window=21).mean()
             df['MA200'] = df['Close'].rolling(window=200).mean()
             df['MA20'] = df['Close'].rolling(window=20).mean()
             df['STD20'] = df['Close'].rolling(window=20).std()
@@ -211,12 +211,12 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
             # ==========================================
             
             # 軌道一：趨勢會漲 (Price 在 21MA 與 200MA 生命線之上)
-            if current_price >= latest['MA21'] and latest['MA21'] >= latest['MA200']:
+            if current_price >= latest['MA20'] and latest['MA20'] >= latest['MA200']:
                 market_state = "📈 多頭波段 (會漲)"
                 if current_price <= low_absorb_price:
                     final_action = "🔥 強力買入"
                     reason_str = f"多頭強勢股拉回過深，跌破 20MA 對稱網格下限 (-{atr_multiplier}x ATR)，黃金埋伏機會！"
-                elif abs(current_price - latest['MA21'])/latest['MA21'] <= 0.02:
+                elif abs(current_price - latest['MA20'])/latest['MA20'] <= 0.02:
                     final_action = "🟢 買入"
                     reason_str = "多頭波段拉回到關鍵 21MA 決策線重要支撐區，符合穩定建倉邏輯。"
                 elif current_price >= high_toss_price or current_price >= latest['BB_Upper']:
@@ -227,9 +227,9 @@ with st.spinner("正在提煉五等核心 ACTION 決策中..."):
                     reason_str = f"多頭結構健全，已為您計算最新 20MA 低吸位 {currency_symbol}{low_absorb_price:.2f}，未到請安心持股。"
                     
             # 軌道二：趨勢會跌 (Price 跌破生命線與決策線)
-            elif current_price < latest['MA21'] and current_price < latest['MA200']:
+            elif current_price < latest['MA20'] and current_price < latest['MA200']:
                 market_state = "📉 空頭結構 (會跌)"
-                if yesterday_close >= latest['MA21'] and current_price < latest['MA21']:
+                if yesterday_close >= latest['MA20'] and current_price < latest['MA20']:
                     final_action = "🚨 強力賣出"
                     reason_str = "剛破 21MA 決策線，趨勢轉空，請果斷執行防守離場紀律，拒絕接飛刀。"
                 elif current_price >= high_toss_price:
@@ -312,12 +312,12 @@ if selected_stock:
         df_detail = stock_detail.history(start=start_date)
         
         if not df_detail.empty and len(df_detail) > 200:
-            df_detail['MA21'] = df_detail['Close'].rolling(window=21).mean()
+            df_detail['MA20'] = df_detail['Close'].rolling(window=21).mean()
             df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
             
             fig = go.Figure()
             fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA21'], name='21MA 趨勢決策線', line=dict(color='orange', width=2.5)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20'], name='21MA 趨勢決策線', line=dict(color='orange', width=2.5)))
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=3)))
             
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
