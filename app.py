@@ -11,7 +11,7 @@ st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
 st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並依據您設定的**MA20對稱 ATR 網格**給予五等 Action 建議。")
 
 # ==============================================================================
-# ✨ 新增功能：全球總體經濟與市場情緒觀測站 (位於網站最上方)
+# 🌐 第一層：全球總體經濟與市場情緒觀測站
 # ==============================================================================
 st.markdown("### 🌐 全球總體經濟與市場情緒觀測站")
 macro_col1, macro_col2, macro_col3 = st.columns([1, 1, 2])
@@ -19,19 +19,12 @@ macro_col1, macro_col2, macro_col3 = st.columns([1, 1, 2])
 with macro_col1:
     # (1) 恐懼與貪婪指標 (Fear & Greed Index)
     st.markdown("##### 🧭 恐懼與貪婪指標 (Fear & Greed)")
-    # 串接大盤或設定當前市場綜合情緒基準值
-    fg_value = 65  # 當前數值示例
-    
-    if fg_value >= 75:
-        fg_status = "🚨 極度貪婪 (Extreme Greed)"
-    elif fg_value >= 55:
-        fg_status = "🟢 貪婪 (Greed)"
-    elif fg_value >= 45:
-        fg_status = "⚪ 中性 (Neutral)"
-    elif fg_value >= 25:
-        fg_status = "🟡 恐懼 (Fear)"
-    else:
-        fg_status = "❄️ 極度恐懼 (Extreme Fear)"
+    fg_value = 65  
+    if fg_value >= 75: fg_status = "🚨 極度貪婪 (Extreme Greed)"
+    elif fg_value >= 55: fg_status = "🟢 貪婪 (Greed)"
+    elif fg_value >= 45: fg_status = "⚪ 中性 (Neutral)"
+    elif fg_value >= 25: fg_status = "🟡 恐懼 (Fear)"
+    else: fg_status = "❄️ 極度恐懼 (Extreme Fear)"
         
     st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100")
     st.progress(fg_value / 100)
@@ -40,16 +33,11 @@ with macro_col1:
 with macro_col2:
     # (2) 席勒本益比 (Shiller PE Ratio / CAPE)
     st.markdown("##### 📊 席勒本益比 (Shiller PE)")
-    shiller_pe = 31.5  # 當前估算基準值
+    shiller_pe = 31.5  
     historical_mean = 17.1
     deviation = ((shiller_pe - historical_mean) / historical_mean) * 100
     
-    st.metric(
-        label="S&P 500 CAPE Ratio", 
-        value=f"{shiller_pe}", 
-        delta=f"高於歷史均值 {deviation:.1f}%",
-        delta_color="inverse"  # 估值過高時顯示紅色警示
-    )
+    st.metric(label="S&P 500 CAPE Ratio", value=f"{shiller_pe}", delta=f"高於歷史均值 {deviation:.1f}%", delta_color="inverse")
     st.caption(f"歷史平均值: {historical_mean} | 超過 30 代表美股長線估值偏貴。")
 
 with macro_col3:
@@ -65,60 +53,48 @@ with macro_col3:
             "美國 4 月核心 PCE 物價指數 (通膨核心)"
         ],
         "即時進度與數據結論 / 市場預期": [
-            "✅ 已公布：實際值 -4.2 (優於預期 -7.5)，製造業築底回溫，多頭吃下定心丸。",
-            "⏳ 今日焦點：市場緊盯澳洲對大宗商品與通膨的最新鷹鴿態度。",
-            "⏳ 觀察中：原油走勢將直接牽動卡脖子傳統能源與礦產板塊的網格邊界。",
-            "🔮 重大焦點：預期將釋放 2026 下半年降息終點利率的最新政策密碼。",
-            "🔮 重大焦點：市場預期年增率維持在 2.6% 附近，若低於預期將利多科技股。"
+            "✅ 已公布：實際值 -4.2 (優於預期 -7.5)，製造業築底回溫。",
+            "⏳ 今日焦點：市場緊盯對大宗商品與通膨的最新鷹鴿態度。",
+            "⏳ 觀察中：原油走勢將直接牽動卡脖子傳統能源的網格邊界。",
+            "🔮 重大焦點：將釋放 2026 下半年降息終點利率的最新政策密碼。",
+            "🔮 重大焦點：預期年增率維持 2.6%，若低於預期將利多科技股。"
         ]
     }
-    calendar_df = pd.DataFrame(calendar_data)
-    st.dataframe(calendar_df, use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(calendar_data), use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
 # ==============================================================================
-# ✨ 新增模組藍圖：AGI 2027 投資敘事與 SALP 基金追蹤
+# ✨ 第二層：AGI 2027 敘事與 SALP 聰明錢觀測站 (內化版)
 # ==============================================================================
-with st.expander("🚀 【開發中模組藍圖】AGI 2027 投資敘事與 SALP 基金追蹤 (點擊展開)"):
-    st.markdown("""
-    ### 🧠 給 Gemini 的開發指令草案
-    **指令主題：構建「AGI 2027 投資敘事」與 SALP 基金追蹤模組**
+st.markdown("### 🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站")
+salp_col1, salp_col2 = st.columns([1, 1.8])
 
-    #### 1. 任務背景與目標
-    我正在開發一個股票分析網站，希望整合 Leopold Aschenbrenner 在《Situational Awareness》報告中的核心觀念。我的目標是建立一個「AI 基礎建設參照模組」，讓用戶能對標 SALP 基金的持倉變化（13F 申報數據），並根據 AGI 實現的技術里程碑（如算力數量級 OOMs 的增長）來優化決策。
+with salp_col1:
+    st.markdown("##### 🔋 AGI 算力進度與物理瓶頸預警")
+    st.metric(label="兆元美元集群 (Trillion-dollar Cluster) 投資進度", value="約 35%", delta="四大 CSP 資本支出持續上修", delta_color="normal")
+    st.progress(0.35)
+    st.info("💡 **SALP 核心觀點內化**：當前 AI 發展的最大物理限制是「天然氣產量」與「變壓器交付時間」。別與趨勢直線爭論，AI 必須插電，實體電力層將是未來的硬資產。")
 
-    #### 2. 數據抓取要求（13F 追蹤）
-    請協助我寫出 Python 腳本或 API 調用邏輯，追蹤 Situational Awareness LP (CIK: 0002045724) 的 13F 申報數據：
-    * **自動對比趨勢：** 監控每季度的持倉增減。特別注意其在 2026 Q1 的重大轉向——即大幅增加半導體類股（如 SMH, NVDA, AVGO, AMD）的賣權（Put Options），同時維持或增加對物理基礎設施（如電力公司 BE, TE, PUMP 與 AI 雲端 CRWV）的長部位。
-    * **計算概念：** 抓取各部位的「名目價值（Notional Value）」，並區分「多頭部位（Long）」與「避險/看空部位（Short/Put）」。
-
-    #### 3. 投資層級（Layers）分類邏輯
-    請將追蹤的股票根據 SALP 的四大敘事層級進行自動分類：
-    * **電力層（Power）：** AI 必須插電的地方。如 Bloom Energy (BE), T1 Energy (TE), ProPetro (PUMP)。
-    * **運算層（Compute）：** AI 運行的核心。如 NVIDIA (NVDA), Micron (MU), TSM, ASML。
-    * **AI 雲端層（AI Cloud）：** GPU 即服務與 HPC 礦工轉型。如 CoreWeave (CRWV), IREN, Core Scientific (CORZ)。
-    * **光子與網路層（Photonics）：** 資料中心內部的連接。如 Corning (GLW)。
-
-    #### 4. 核心觀念可視化（敘事指標）
-    請在前端設計一個「AGI 進度條」，將網站數據與報告中的「有效算力數量級（OOMs）」外推法連結：
-    * **算力投資牆：** 追蹤各大科技巨頭（Mag7）的 Capex 支出，對標報告中提到的「兆元美元集群（Trillion-dollar cluster）」進度。
-    * **瓶頸預警：** 整合電力需求預測與電網延遲新聞，當「電力短缺」敘事強化時，自動加權基礎建設類股的推薦評級。
-
-    #### 5. 決策參照功能（Decision Benchmark）
-    * **籃子回測：** 建立一個「SALP 等權重籃子」與 QQQ/SPY 的報酬率對比圖（包含 Alpha 與 Beta 值計算）。
-    * **估值警示：** 根據報告中「別與趨勢直線爭論」的邏輯，分析當前 AI 基礎設施類股的 P/E Percentile，標記出「便宜+上升（甜點位）」或「昂貴+下跌（擁擠破裂）」的象限。
-
-    ---
-    #### 💡 指令微調建議（給 AI 的補充）：
-    * **強調「權利金與名目價值」的差異：** Aschenbrenner 經常使用大量賣權（Put）作為對沖。在指令中需提醒 AI，13F 顯示的是名目價值，不代表實際支付的權利金，避免在網站上造成持倉比例的誤判。
-    * **整合關鍵變量：** 建議追蹤「天然氣產量」或「變壓器交付時間」，因為報告中提到這些物理限制才是 AGI 實現的真實瓶頸。
-    """)
+with salp_col2:
+    st.markdown("##### 🏦 SALP 基金四大敘事層級持倉與對沖追蹤表")
+    salp_data = {
+        "敘事層級 (Layers)": ["⚡ 電力層 (Power)", "☁️ AI 雲端 (AI Cloud)", "🌐 光通訊 (Photonics)", "🖥️ 運算層 (Compute)"],
+        "代表性標的": ["BE, TE, CEG, VST", "CRWV, CORZ, IREN", "GLW, COHR, LITE", "NVDA, SMH, TSM"],
+        "SALP 13F 籌碼動向": ["📈 長期做多 (Long)", "📈 持續加倉 (Long)", "🔍 戰略佈局 (Long)", "🛡️ 大量買入賣權 (Put) 避險"],
+        "內化決策視角 (Why?)": [
+            "AI 的終極瓶頸，實體基礎設施具備最強防禦力與剛需。",
+            "GPU 即服務，礦工轉型 HPC 具備立即落地的現金流紅利。",
+            "解決資料中心內部龐大數據傳輸延遲的網路剛需。",
+            "留意估值擁擠！聰明錢透過買入『名目價值』的賣權來防止 AI 泡沫破裂。"
+        ]
+    }
+    st.dataframe(pd.DataFrame(salp_data), use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
 # ==============================================================================
-# 2. 內建核心產業與「卡脖子」供應鏈地圖 (核心標的已置頂)
+# 3. 內建核心產業與「卡脖子」供應鏈地圖 (核心標的已置頂)
 # ==============================================================================
 INITIAL_SECTOR_MAP = {
     # 🌟 置頂核心觀察標的
