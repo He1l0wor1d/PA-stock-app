@@ -290,9 +290,6 @@ if summary_data:
 
 st.markdown("---")
 
-# ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面
-# ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 selected_stock = st.selectbox("選擇個股查看決策軌道：", sorted(active_tickers))
 
@@ -312,167 +309,35 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
-            # --- 原始基礎數據抓取 ---
             info = stock_detail.info if stock_detail.info else {}
+            
+            # 基本面防空鎖升級
             rev_growth = info.get('revenueGrowth')
             rev_growth_str = f"{rev_growth * 100:.1f}%" if rev_growth is not None else "無數據"
-            
-            # 貨幣單位判定
+                
+            capex_str = "無數據"
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
             curr_str = "NT$" if is_tw_detail else "美元"
-            
-            # 抓取資本支出 (Capex) 與 自由現金流 (FCF) 歷史數據
-            capex_str = "無數據"
-            fcf_str = "無數據"
-            net_income_trend = "無數據"
-            
+
             try:
                 cf = stock_detail.quarterly_cashflow
                 if cf is None or cf.empty: cf = stock_detail.cashflow
-                
-                # 財報 (Income Statement) 用於淨利趨勢
-                is_stmt = stock_detail.quarterly_financials
-                if is_stmt is None or is_stmt.empty: is_stmt = stock_detail.financials
-                
                 if cf is not None and not cf.empty:
-                    # 1. 資本支出
-                    cap_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                    if cap_keys:
-                        latest_capex = cf.loc[cap_keys[0]].dropna().iloc[0]
-                        capex_str = f"{abs(latest_capex) / 100000000:.1f} 億 {curr_str}"
-                    
-                    # 2. 自由現金流
-                    fcf_keys = [k for k in cf.index if 'Free Cash Flow' in str(k) or 'free_cash_flow' in str(k).lower()]
-                    if fcf_keys:
-                        latest_fcf = cf.loc[fcf_keys[0]].dropna().iloc[0]
-                        fcf_str = f"{latest_fcf / 100000000:.1f} 億 {curr_str}"
-                        
-                if is_stmt is not None and not is_stmt.empty:
-                    ni_keys = [k for k in is_stmt.index if 'Net Income' in str(k) or 'net_income' in str(k).lower()]
-                    if ni_keys:
-                        ni_series = is_stmt.loc[ni_keys[0]].dropna()
-                        if len(ni_series) >= 2:
-                            net_income_trend = "📈 增長中" if ni_series.iloc[0] > ni_series.iloc[1] else "📉 衰退中"
+                    matching_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                    if matching_keys:
+                        latest_capex = cf.loc[matching_keys[0]].dropna().iloc[0]
+                        if pd.notna(latest_capex) and latest_capex != 0:
+                            capex_str = f"{abs(latest_capex) / 100000000:.1f} 億{curr_str}"
             except Exception: pass
                 
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
             
-            # 顯示主要三個 Metric 指標
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("營收年增率 (YoY)", rev_growth_str)
-            col_f2.metric("最新資本支出 (Capex)", capex_str, help="反映企業對 AI 算力基礎設施的投入力道")
+            col_f2.metric(f"最新資本支出 (Capex)", capex_str, help="反映企業對 AI 算力基礎設施的投入力道")
             col_f3.metric("當前估值 (PE Ratio)", pe_str)
-
-            # ==============================================================================
-            # ✨ 新增區塊：既有財經數據無縫整合看板 (即時連動、零 Token 消耗)
-            # ==============================================================================
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.subheader(f"📊 華爾街量化數據終端：{selected_stock} 實時基本面拆解")
-            
-            # 精確抓取剩餘財務變數
-            co_name = info.get('longName', selected_stock)
-            biz_summary = info.get('longBusinessSummary', '未提供商業模式簡介。')
-            profit_margin = info.get('profitMargins')
-            margin_str = f"{profit_margin * 100:.1f}%" if profit_margin is not None else "無數據"
-            debt_to_equity = info.get('debtToEquity')
-            debt_str = f"{debt_to_equity:.1f}%" if debt_to_equity is not None else "無數據"
-            roe = info.get('returnOnEquity')
-            roe_str = f"{roe * 100:.1f}%" if roe is not None else "無數據"
-            
-            # 公允價值範圍解析 (延續網站上方原有邏輯)
-            t_low = info.get('targetLowPrice')
-            t_mean = info.get('targetMeanPrice')
-            t_high = info.get('targetHighPrice')
-            fv_range = f"{curr_str}{t_low:.1f} ~ {curr_str}{t_high:.1f}" if t_low and t_high else "數據不足"
-            fv_mean = f"{curr_str}{t_mean:.1f}" if t_mean else "數據不足"
-
-            # 建立 7 大深度分析分頁
-            t1, t2, t3, t4, t5, t6, t7 = st.tabs([
-                "1️⃣ 全面分析", "2️⃣ 財務體質", "3️⃣ 護城河", 
-                "4️⃣ 估值分析", "5️⃣ 成長潛力", "6️⃣ 多空辯論", "7️⃣ 投資決策"
-            ])
-            
-            with t1:
-                st.markdown(f"### 🗂️ Senior Analyst 完整分析報告：{selected_stock}")
-                st.markdown(f"""
-                * **公司完整名稱：** {co_name}
-                * **商業模式與收入來源：** {biz_summary[:350]}... (詳見成長潛力頁面)
-                * **產業最新趋势：** 當前市場資金高度向 AI 算力基礎設施、硬資產（電力、電網基建）集中。
-                * **財務健康速覽：** 營收年增率為 **{rev_growth_str}**，目前的利潤率表現為 **{margin_str}**。
-                * **華爾街目標價共識：** 分歧區間落在 `{fv_range}`，市場共識中位數（公允均值）為 `{fv_mean}`。
-                """)
                 
-            with t2:
-                st.markdown(f"### 📈 數據拆解：{co_name} 財務體質驗證")
-                st.markdown(f"""
-                根據最新揭露季度財報數據，該公司財務體質指標如下：
-                * **營收成長動能 (YoY)：** `{rev_growth_str}`
-                * **淨利趨勢方向：** `{net_income_trend}`
-                * **單季自由現金流 (FCF)：** `{fcf_str}`
-                * **公司利潤率 (Profit Margin)：** `{margin_str}`
-                * **負債權益比 (Debt/Equity Ratio)：** `{debt_str}`
-                * **股東權益報酬率 (ROE)：** `{roe_str}`
-                """)
-                if debt_to_equity and debt_to_equity > 150:
-                    st.warning("⚠️ 警示：該公司負債比高於 150%，財務體質有槓桿過大、走弱之風險，請搭配震盪或多頭結構紀律操作。")
-                else:
-                    st.success("🟢 判斷結論：自由現金流流動性健全，核心獲利利潤率達標，目前財務體質維持在「穩健偏強」結構。")
-                    
-            with t3:
-                st.markdown(f"### 🏰 {selected_stock} 競爭護城河與綜合評估")
-                st.markdown(f"""
-                綜合評估企業的五大核心防禦壁壘：
-                1.  **品牌影響力 / 定價權：** 依據利潤率 `{margin_str}` 判斷，具備同業優勢。
-                2.  **網路效應：** 與全球頂級供應鏈深度綁定。
-                3.  **轉換成本：** 客戶黏著度極高，替代方案轉移成本巨大。
-                4.  **成本與技術優勢：** 最新單季大舉投入高達 `{capex_str}` 資本支出，全面封鎖對手。
-                """)
-                # 簡單依據毛利與 Capex 給予量化權重打分
-                moat_score = 8 if (profit_margin and profit_margin > 0.2) else 6
-                st.metric("🛡️ 護城河強度綜合評分 (1-10分)", f"{moat_score} 分")
-                
-            with t4:
-                st.markdown("### ⚖️ 投資銀行研究報告：定價與估值模型")
-                st.markdown(f"""
-                * **當前市場本益比 (P/E Ratio)：** `{pe_str}`
-                * **分析師公允價值區間 (TV Consensus)：** `{fv_range}`
-                * **市場共識公允均值：** `{fv_mean}`
-                """)
-                if t_mean and current_price < t_mean:
-                    st.success(f"📊 **估值結論：目前股價 ({currency_symbol}{current_price:.1f}) 低於公允均值 ({fv_mean})，在基本面上具備超值低估空間。**")
-                else:
-                    st.warning(f"📊 **估值結論：目前股價 ({currency_symbol}{current_price:.1f}) 高於或接近公允均值 ({fv_mean})，溢價已被市場消化，請嚴格執行網格與技術線買點。**")
-                    
-            with t5:
-                st.markdown("### 🚀 未來成長潛力與技術/AI優勢")
-                st.markdown(f"""
-                * **商業模式核心主軸：** {biz_summary}
-                * **AI 戰略資本力道：** 該公司目前在最新季度砸下 **{capex_str}** 的高額資本支出，用於擴大護城河與產能儲備。
-                * **長線潛在成長空間：** 營收增速持續以 `{rev_growth_str}` 的步調擴張，具備高度承接未來 5–10 年產業剛需轉型的實力。
-                """)
-                
-            with t6:
-                st.markdown("### ⚔️ 華爾街分析師多空現場辯論")
-                st.write("**🐂 多頭分析師（Bull Case）：**")
-                st.info(f"「這家公司的營收年增率高達 {rev_growth_str}，且單季大舉投資 {capex_str} 築起高強度的物理技術壁壘。目前 ROE 達 {roe_str}，多頭拉回網格下限時就是最好的撿便宜機會！」")
-                st.write("** Bearish 分析師（Bear Case）：**")
-                st.error(f"「雖然公允價值放在那，但別忘了目前大盤席勒本益比已經高達 31.5。且此標的負債水準達 {debt_str}，若總體經濟發生系統性風險，高 Capex 將可能轉為巨大折舊壓力。」")
-                st.write("**⚖️ 中性結論（Neutral Summary）：**")
-                st.markdown(f"該標的技術優勢無庸置疑。短線操作切忌追高，應嚴格遵循系統的 **{low_absorb_price:.1f} 買點** 及 **移動停利價位** 進行機械化防守。")
-                
-            with t7:
-                st.markdown(f"### 🎯 最終投資策略與綜合決策指南")
-                st.markdown(f"""
-                * **短期展望 (1年內)：** 緊盯系統對稱網格。目前市場結構判斷為：`{market_state}`。
-                * **長期展望 (5年以上)：** 護城河與財務數據優異，適合長線分批低吸。
-                * **關鍵催化因素：** 最新季度資本支出 (`{capex_str}`) 能否順利轉換為下季利潤率的提升。
-                * **主要風險：** 股價波動若放大，公允價值區間過寬時，需留意分歧帶來的短線震盪。
-                """)
-                # 結合網站原本的 5 等號燈，給予無縫結合建議
-                st.radio("🚦 系統最終策略操作建議：", ["買入 (Buy)", "持有/觀望 (Hold)", "避免/減倉 (Avoid)"], 
-                         index=0 if final_action in ["🔥 強力買入", "🟢 買入"] else (1 if final_action == "⚪ 觀望" else 2))
-
     except Exception as e: st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
