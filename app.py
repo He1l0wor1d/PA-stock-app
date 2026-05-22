@@ -337,6 +337,87 @@ if selected_stock:
             col_f1.metric("營收年增率 (YoY)", rev_growth_str)
             col_f2.metric(f"最新資本支出 (Capex)", capex_str, help="反映企業對 AI 算力基礎設施的投入力道")
             col_f3.metric("當前估值 (PE Ratio)", pe_str)
+
+            # ==============================================================================
+            # ✨ 新增區塊：AI 深度分析專屬提示詞 (實時連動 selected_stock)
+            # ==============================================================================
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.subheader(f"🤖 AI 深度分析專屬提示詞")
+            st.caption(f"您可以一鍵複製以下指令，貼給 ChatGPT 或 Gemini 進行 **{selected_stock}** 的專業級分析：")
+
+            with st.expander(f"📋 展開查看 {selected_stock} 的 7 大華爾街分析師提示詞", expanded=False):
+                tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+                    "1️⃣ 全面分析", "2️⃣ 財務體質", "3️⃣ 護城河", 
+                    "4️⃣ 估值分析", "5️⃣ 成長潛力", "6️⃣ 多空辯論", "7️⃣ 投資決策"
+                ])
+
+                with tab1:
+                    st.code(f"""以華爾街資深股票分析師的角度進行完整分析。
+分析股票：{selected_stock}
+內容包括：
+• 商業模式與收入來源
+• 競爭優勢（護城河）
+• 產業趨勢
+• 財務健康狀況（營收成長、利潤率、負債）
+• 關鍵風險
+• 與競爭對手的估值比較
+• 多頭、空頭與基本情境分析
+• 未來 12–24 個月展望
+請用簡單易懂的方式解釋，但保有專業分析深度。""", language="markdown")
+
+                with tab2:
+                    st.code(f"""分析 {selected_stock} 過去 5 年的財務數據。
+請拆解：
+• 營收成長
+• 淨利趨勢
+• 自由現金流
+• 利潤率
+• 負債水準
+• 股東權益報酬率（ROE）
+並判斷這家公司目前是財務體質正在變強，還是開始走弱。""", language="markdown")
+
+                with tab3:
+                    st.code(f"""評估 {selected_stock} 的競爭護城河。
+請分析：
+• 品牌影響力
+• 網路效應
+• 轉換成本
+• 成本優勢
+• 專利或獨家技術
+並與主要競爭對手進行比較，最後幫這家公司的護城河強度打分（1–10 分）。""", language="markdown")
+
+                with tab4:
+                    st.code(f"""對 {selected_stock} 進行估值分析（如投資銀行研究報告）。
+請包含：
+• 本益比（P/E）與同業比較
+• 折現現金流（DCF）估值
+• 產業平均估值水準
+• 是否被低估或高估的結論""", language="markdown")
+
+                with tab5:
+                    st.code(f"""分析 {selected_stock} 的未來成長潛力。
+請考慮：
+• 市場規模
+• 產業成長率
+• 擴張機會
+• 新產品
+• AI 或技術優勢
+並評估未來 5–10 年的潛在成長空間。""", language="markdown")
+
+                with tab6:
+                    st.code(f"""以兩位分析師的對話方式，針對 {selected_stock} 進行多空辯論。
+一位為多頭觀點（看漲），一位為空頭觀點（看跌）。
+雙方都必須提出有數據支持的論點。
+最後請給出一個相對中性的結論。""", language="markdown")
+
+                with tab7:
+                    st.code(f"""是否應該投資這檔股票（股票代號：{selected_stock}）
+請進行評估並包含：
+• 短期展望（1年內）
+• 長期展望（5年以上）
+• 關鍵催化因素
+• 主要風險
+• 最終結論：買入、持有或避免""", language="markdown")
                 
     except Exception as e: st.error(f"分析載入失敗: {e}")
 
