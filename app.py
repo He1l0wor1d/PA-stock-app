@@ -252,45 +252,7 @@ if selected_stock:
                     ax=0, ay=35, font=dict(color="white", size=9), bgcolor="green"
                 ))
         
-        fig.update_layout(height=500, template="plotly_white", annotations=annotations)
-        st.plotly_chart(fig, use_container_width=True)
-        
-    except Exception as e:
-        st.error(f"分析載入失敗: {e}")
-            
-            info = stock_detail.info if stock_detail.info else {}
-            is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
-            
-            rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
-            rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街分析師複合共識預期)" if rev_growth is not None else "未揭露未來展望"
-            
-            capex_str = "未揭露未來指引"
-            try:
-                cf = stock_detail.quarterly_cashflow
-                if cf is None or cf.empty: cf = stock_detail.cashflow
-                if cf is not None and not cf.empty:
-                    m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                    if m_keys:
-                        latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
-                        if not is_tw_detail and latest_raw > 10000000000:
-                            latest_raw = latest_raw / 32.0
-                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
-                        elif is_tw_detail:
-                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (單季最新數據年化折算)"
-                        else:
-                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
-            except Exception: pass
-            
-            pe_ratio = info.get('trailingPE') or info.get('forwardPE')
-            pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
-            
-            col_f1, col_f2, col_f3 = st.columns(3)
-            col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx Run Rate)", capex_str)
-            col_f3.metric("實時估值 (PE Ratio)", pe_str)
-                
-    except Exception as e: 
-        st.error(f"分析載入失敗: {e}")
+     
 
 # ==============================================================================
 # ⏳ 策略回測績效驗證 (支持安全型雙軌訊號回測)
