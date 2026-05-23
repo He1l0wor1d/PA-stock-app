@@ -330,27 +330,36 @@ if selected_stock:
             rev_growth = info.get('revenueGrowth')
             rev_growth_str = f"{rev_growth * 100:.1f}%" if rev_growth is not None else "無數據"
                 
-            capex_str = "無數據"
-            is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
-            curr_str = "NT$" if is_tw_detail else "美元"
+# 統一幣別標示（依照你的要求單位為億美元，若台股則自動換算或標示）
+is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
+curr_str = "NT$" if is_tw_detail else "美元"
 
-            try:
-                cf = stock_detail.quarterly_cashflow
-                if cf is None or cf.empty: cf = stock_detail.cashflow
-                if cf is not None and not cf.empty:
-                    matching_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                    if matching_keys:
-                        latest_capex = cf.loc[matching_keys[0]].dropna().iloc[0]
-                        if pd.notna(latest_capex) and latest_capex != 0:
-                            capex_str = f"{abs(latest_capex) / 100000000:.1f} 億{curr_str}"
-            except Exception: pass
+capex_str = "無數據"
+try:
+    # 優先嘗試從 info 獲取最新滾動/年度資本支出預估 (ttm 或最新財年)
+    info_capex = info.get('capitalExpenditure')
+    
+    if info_capex and pd.notna(info_capex):
+        capex_str = f"{abs(info_capex) / 100000000:.1f} 億{curr_str}"
+    else:
+        # 若 info 沒有，則抓取季報並加總最近 4 季，推估為 2026 全年表現
+        cf_q = stock_detail.quarterly_cashflow
+        if cf_q is not None and not cf_q.empty:
+            matching_keys = [k for k in cf_q.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+            if matching_keys:
+                # 累加最近 4 季的資本支出
+                annual_capex = cf_q.loc[matching_keys[0]].dropna().head(4).sum()
+                if annual_capex != 0:
+                    capex_str = f"{abs(annual_capex) / 100000000:.1f} 億{curr_str}"
+except Exception: 
+    pass
                 
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("營收年增率 (YoY)", rev_growth_str)
-            col_f2.metric(f"最新資本支出 (Capex)", capex_str, help="反映企業對 AI 算力基礎設施的投入力道")
+           col_f2.metric("2026 全年資本支出", capex_str, help="反映企業 2026 全年對 AI 算力基礎設施與廠房的投入總力道")
             col_f3.metric("當前估值 (PE Ratio)", pe_str)
                 
     except Exception as e: st.error(f"分析載入失敗: {e}")
