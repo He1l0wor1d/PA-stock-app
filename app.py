@@ -1,7 +1,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
@@ -9,8 +8,8 @@ import json
 import re
 
 st.set_page_config(layout="wide", page_title="股票決策系統")
-st.title("🦅 美股+台股『極簡五等燈號』雙軌制決策系統")
-st.markdown("本系統已進化為**雙軌制安全引擎**：具備左側抄底的**【🔥強買】**，與具備防追高安全閥的右側**【⚡動能突破】**。")
+st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
+st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並依據您設定的**MA20對稱 ATR 網格**給予五等 Action 建議。")
 
 # ==============================================================================
 # 🌐 第一層：全球總體經濟與市場情緒觀測站
@@ -29,7 +28,7 @@ with macro_col1:
         
     st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100")
     st.progress(fg_value / 100)
-    st.caption("💡 提示：大盤進入『極度貪婪』時，右側動能追價應嚴格控制倉位。")
+    st.caption("💡 提示：網格交易者應注意，大盤進入『極度貪婪』時應提高減倉意識。")
 
 with macro_col2:
     st.markdown("##### 📊 席勒本益比 (Shiller PE)")
@@ -37,7 +36,7 @@ with macro_col2:
     historical_mean = 17.1
     deviation = ((shiller_pe - historical_mean) / historical_mean) * 100
     st.metric(label="S&P 500 CAPE Ratio", value=f"{shiller_pe:.1f}", delta=f"高於歷史均值 {deviation:.1f}%", delta_color="inverse")
-    st.caption(f"歷史平均值: 17.1 | 估值偏貴時，非大牛股的動能突破高機率為假突破。")
+    st.caption(f"歷史平均值: {historical_mean} | 超過 30 代表美股長線估值偏貴。")
 
 with macro_col3:
     st.markdown("##### 📅 本週關鍵財經數據行事曆")
@@ -48,6 +47,30 @@ with macro_col3:
     }
     calendar_df = pd.DataFrame(calendar_data)
     st.dataframe(calendar_df, use_container_width=True, hide_index=True)
+
+st.markdown("---")
+
+# ==============================================================================
+# ✨ 第三層：AGI 2027 敘事與 SALP 聰明錢觀測站
+# ==============================================================================
+st.markdown("### 🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站")
+salp_col1, salp_col2 = st.columns([1, 1.8])
+
+with salp_col1:
+    st.markdown("##### 🔋 AGI 算力進度與物理瓶頸預警")
+    st.metric(label="兆元美元集群投資進度", value="約 35%", delta="Capex 持續上修", delta_color="normal")
+    st.progress(0.35)
+    st.info("💡 **SALP 觀點**：AI 發展最大限制是「天然氣產量」與「變壓器交付」。AI 必須插電，電力層是未來硬資產。")
+
+with salp_col2:
+    st.markdown("##### 🏦 SALP 基金敘事層級持倉")
+    salp_data = {
+        "敘事層級": ["⚡ 電力層 (Power)", "☁️ AI 雲端 (AI Cloud)", "🌐 光通訊 (Photonics)", "🖥️ 運算層 (Compute)"],
+        "代表標的": ["BE, CEG, VST", "CRWV, CORZ, IREN", "GLW, COHR", "NVDA, SMH, TSM"],
+        "籌碼動向": ["📈 長期做多", "📈 持續加倉", "🔍 戰略佈局", "🛡️ 買入賣權避險"],
+        "內化視角": ["防禦力與剛需最強", "現金流紅利即刻落地", "解決數據傳輸延遲", "防範估值擁擠泡沫"]
+    }
+    st.dataframe(pd.DataFrame(salp_data), use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
@@ -69,6 +92,14 @@ INITIAL_SECTOR_MAP = {
     "GOOGL": "AI巨頭與軟體", "AMZN": "AI巨頭與軟體", "META": "AI巨頭與軟體", "PLTR": "AI巨頭與軟體", 
     "NOW": "AI巨頭與軟體", "ORCL": "AI巨頭與軟體", "APP": "AI巨頭與軟體", "NET": "AI巨頭與軟體", 
     "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", "2382.TW": "AI巨頭與軟體", "CBRS": "AI巨頭與軟體",
+    "ARKX": "航太太空國防", "NASA": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
+    "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", "ONDS": "航太太空國防",
+    "XOM": "傳統能源礦產", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
+    "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技",
+    "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
+    "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理",
+    "TSLA": "智能車新能源", "BYDDF": "智能車新能源", "MSTR": "數位資產科技", 
+    "BRK-B": "綜合控股投資", "GLD": "綜合控股投資", "SHLD": "綜合控股投資", "NBIS": "綜合控股投資",
     "2330.TW": "晶圓代工製程", "0050.TW": "市值型大盤", "2851.TW": "金融再保險", "5607.TW": "航空航運物流",
 }
 
@@ -88,26 +119,16 @@ active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)"
 distinct_sectors = ["全部顯示"] + sorted(list(set(st.session_state.sector_map.values())))
 selected_sector_filter = st.sidebar.selectbox("🎯 聚焦特定產業類別：", distinct_sectors)
 
-st.sidebar.header("📊 計量參數調校面板")
+st.sidebar.header("📊 對稱網格參數設定")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
-atr_multiplier = st.sidebar.slider("左側網格抄底 ATR 倍數 (x)", 0.5, 2.5, 1.4, 0.1)
+atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 2.5, 1.4, 0.1)
 
-# 定義時間流範圍
-start_date_看板 = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
-start_date_3years = (datetime.now() - timedelta(days=1095)).strftime('%Y-%m-%d')
-
-def calculate_rsi(series, period=14):
-    delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / (loss + 1e-10)
-    return 100 - (100 / (1 + rs))
-
+start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
 summary_data = []
 action_alerts = []
-action_rank = {"🔥 強力買入": 0, "⚡ 動能突破": 1, "⚪ 觀望": 2}
+action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
 
-with st.spinner("雙軌計量引擎正在提煉核心決策..."):
+with st.spinner("正在提煉核心決策..."):
     for ticker in active_tickers:
         try:
             ticker_sector = st.session_state.sector_map.get(ticker, "未分類")
@@ -117,64 +138,88 @@ with st.spinner("雙軌計量引擎正在提煉核心決策..."):
             currency_symbol = "NT$ " if is_tw else "$ "
             
             stock = yf.Ticker(ticker)
-            df = stock.history(start=start_date_看板)
-            if df.empty or len(df) < 40: continue
+            df = stock.history(start=start_date)
+            if df.empty or len(df) < 220: continue
             
+            info = stock.info if stock.info else {}
+            target_low = info.get('targetLowPrice')
+            target_mean = info.get('targetMeanPrice')
+            target_high = info.get('targetHighPrice')
+            
+            fair_value_str = "數據不足"
+            if target_mean:
+                if target_low and target_high and (target_low != target_high):
+                    fair_value_str = f"{currency_symbol}{target_low:.1f} ~ {target_high:.1f} (均值:{target_mean:.1f})"
+                else:
+                    fair_value_str = f"{currency_symbol}{target_mean:.1f}"
+
             high_low = df['High'] - df['Low']
             tr = pd.concat([high_low, (df['High'] - df['Close'].shift(1)).abs(), (df['Low'] - df['Close'].shift(1)).abs()], axis=1).max(axis=1)
             df['ATR'] = tr.rolling(window=atr_period).mean()
-            df['MA20'] = df['Close'].rolling(window=20).mean()
+            df['MA20_actual'] = df['Close'].rolling(window=20).mean()
             df['MA200'] = df['Close'].rolling(window=200).mean()
-            df['RSI'] = calculate_rsi(df['Close'], 14)
-            df['High20'] = df['High'].shift(1).rolling(window=20).max()
+            df['STD20'] = df['Close'].rolling(window=20).std()
+            df['BB_Upper'] = df['MA20_actual'] + (2 * df['STD20'])
             
             current_price = float(df.iloc[-1]['Close'])  
-            ma20_center = float(df.iloc[-1]['MA20'])
+            yesterday_close = float(df.iloc[-2]['Close'])      
+            ma20_center = float(df.iloc[-1]['MA20_actual'])
             latest_atr = float(df.iloc[-1]['ATR'])
             latest_ma200 = float(df.iloc[-1]['MA200']) if not pd.isna(df.iloc[-1]['MA200']) else ma20_center
-            latest_rsi = float(df.iloc[-1]['RSI'])
-            latest_high20 = float(df.iloc[-1]['High20'])
             
             highest_20d = float(df['High'].rolling(window=20).max().iloc[-1])
             trailing_stop_price = highest_20d - (2 * latest_atr)
-            low_absorb_price = ma20_center - (latest_atr * atr_multiplier)
-            
-            final_action = "⚪ 觀望"
-            reason_str = "未觸及多頭抄底或右側動能突破點，耐心保持現金流。"
-            
-            # 🚀 雙軌制決策樹（導入安全防禦閥）
-            if ma20_center >= latest_ma200: # 長線多頭
-                if current_price <= low_absorb_price:
-                    final_action = "🔥 強力買入"
-                    reason_str = f"優質股拉回，跌破網格下限 (-{atr_multiplier:.1f}x ATR)，黃金抄底位。"
-                # 🛡️ 安全防禦閥：必須在 60 <= RSI <= 78 之間才叫良性動能。如果 RSI 飆破 78 叫極度過熱，拒絕追高！
-                elif current_price > latest_high20 and 60 <= latest_rsi <= 78:
-                    final_action = "⚡ 動能突破"
-                    reason_str = f"股價強勢創 20 日新高，且 RSI 處於健全推進區 ({latest_rsi:.1f})，順勢上車。"
-                elif current_price > latest_high20 and latest_rsi > 78:
-                    final_action = "⚪ 觀望"
-                    reason_str = f"⚠️ 雖創 20 日新高，但 RSI 高達 {latest_rsi:.1f} 已進入極度擁擠過熱區，安全閥啟動，拒絕接盤！"
-            else: # 長線空頭
-                if current_price <= low_absorb_price:
-                    final_action = "🔥 強力買入"
-                    reason_str = "空頭結構超跌至歷史網格極限，啟動小倉位逆勢左側試探。"
+            trailing_stop_str = f"{currency_symbol}{trailing_stop_price:.1f}"
 
-            info = stock.info if stock.info else {}
-            target_mean = info.get('targetMeanPrice')
-            fair_value_str = f"{currency_symbol}{target_mean:.1f}" if target_mean else "數據不足"
+            low_absorb_price = ma20_center - (latest_atr * atr_multiplier)
+            high_toss_price = ma20_center + (latest_atr * atr_multiplier)
+            
+            market_state = "⚪ 觀望"
+            final_action = "⚪ 觀望"
+            reason_str = "未觸及 any 策略臨界點。"
+            
+            if ma20_center >= latest_ma200:
+                market_state = "📈 多頭波段 (會漲)"
+                if current_price <= low_absorb_price: 
+                    final_action = "🔥 強力買入"
+                    reason_str = f"多頭拉回過深，跌破網格下限 (-{atr_multiplier:.1f}x ATR)，黃金埋伏點！"
+                elif abs(current_price - ma20_center)/ma20_center <= 0.02: 
+                    final_action = "🟢 買入"
+                    reason_str = "股館拉回到關鍵 20MA 支撐區，符合建倉邏輯。"
+                elif current_price >= high_toss_price: 
+                    final_action = "🔴 賣出"
+                    reason_str = f"短線噴發過熱，衝破網格上限 (+{atr_multiplier:.1f}x ATR)，波段高拋。"
+                else:
+                    final_action = "⚪ 觀望"
+                    reason_str = f"多頭結構健全，低吸位 {currency_symbol}{low_absorb_price:.1f}，未到請安心持股。"
+                    
+            else:
+                market_state = "📉 空頭結構 (會跌)"
+                if yesterday_close >= ma20_center and current_price < ma20_center: 
+                    final_action = "🚨 強力賣出"
+                    reason_str = "剛破 20MA 決策線，趨勢偏空，果斷離場拒絕接飛刀。"
+                elif current_price >= high_toss_price: 
+                    final_action = "🔴 賣出"
+                    reason_str = f"空頭反彈觸及網格上限 (+{atr_multiplier:.1f}x ATR)，逃命高拋點。"
+                elif current_price <= low_absorb_price: 
+                    final_action = "🟢 買入"
+                    reason_str = f"空頭超賣跌破網格下限 (-{atr_multiplier:.1f}x ATR)，極小倉位短線試探。"
+                else:
+                    final_action = "⚪ 觀望"
+                    reason_str = "空頭下跌結構中，堅決保持空倉觀望。"
 
             if final_action != "⚪ 觀望":
                 action_alerts.append({
-                    "代碼": ticker, "綜合建議": final_action, "當前股價": f"{currency_symbol}{current_price:.1f}",
-                    "公允價值區間": fair_value_str, "移動停利價位": f"{currency_symbol}{trailing_stop_price:.1f}",
+                    "代碼": ticker, "綜合建議": final_action, "市場狀態": market_state, "當前股價": f"{currency_symbol}{current_price:.1f}",
+                    "公允價值區間": fair_value_str, "移動停利價位": trailing_stop_str, "昨日收盤價": f"{currency_symbol}{yesterday_close:.1f}", 
                     "MA20": f"{currency_symbol}{ma20_center:.1f}", "精簡決策原因": reason_str
                 })
 
             summary_data.append({
                 "產業領域": ticker_sector, "代碼": ticker, "當前股價": f"{currency_symbol}{current_price:.1f}",
-                "公允價值區間": fair_value_str, "移動停利價位": f"{currency_symbol}{trailing_stop_price:.1f}",
-                "MA20": f"{currency_symbol}{ma20_center:.1f}", "綜合建議": final_action,
-                "左側抄底價": f"{currency_symbol}{low_absorb_price:.1f}", "右側突破追價": f"{currency_symbol}{latest_high20:.1f}", "精簡決策原因": reason_str
+                "公允價值區間": fair_value_str, "移動停利價位": trailing_stop_str, "昨收盤價": f"{currency_symbol}{yesterday_close:.1f}",
+                "MA20": f"{currency_symbol}{ma20_center:.1f}", "市場狀態": market_state, "綜合建議": final_action,
+                "買點": f"{currency_symbol}{low_absorb_price:.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}", "精簡決策原因": reason_str
             })
         except Exception: pass
 
@@ -186,7 +231,7 @@ else:
 
 st.markdown("---")
 
-st.header(f"📊 雙軌制極簡大看板 (目前聚焦：{selected_sector_filter})")
+st.header(f"📊 降維極簡大看板 (目前聚焦：{selected_sector_filter})")
 if summary_data:
     summary_df = pd.DataFrame(summary_data)
     summary_df['sort'] = summary_df['綜合建議'].map(action_rank)
@@ -196,9 +241,9 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (3年期大深度 K 線 + 雙軌安全標記版)
+# 🔍 個股動態決策軌道與核心基本面 (地毯式前瞻搜索定量引擎)
 # ==============================================================================
-st.header("🔍 個股動態決策軌道與核心基本面 (近3年大深度雙軌制驗證版)")
+st.header("🔍 個股動態決策軌道與核心基本面")
 
 sorted_tickers = sorted(active_tickers)
 default_index = sorted_tickers.index("TSM") if "TSM" in sorted_tickers else 0
@@ -212,101 +257,84 @@ selected_stock = st.selectbox(
 if selected_stock:
     try:
         stock_detail = yf.Ticker(selected_stock)
-        df_detail = stock_detail.history(start=start_date_3years)
+        df_detail = stock_detail.history(start=start_date)
         
-        if not df_detail.empty and len(df_detail) > 40:
+        if not df_detail.empty and len(df_detail) > 200:
             df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
             df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
-            df_detail['RSI_plot'] = calculate_rsi(df_detail['Close'], 14)
-            df_detail['High20_plot'] = df_detail['High'].shift(1).rolling(window=20).max()
-            
-            high_low_det = df_detail['High'] - df_detail['Low']
-            tr_det = pd.concat([high_low_det, (df_detail['High'] - df_detail['Close'].shift(1)).abs(), (df_detail['Low'] - df_detail['Close'].shift(1)).abs()], axis=1).max(axis=1)
-            df_detail['ATR_det'] = tr_det.rolling(window=atr_period).mean()
             
             fig = go.Figure()
             fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=2.5)))
-            
-            # 🚀 歷史回溯 3 年內所有符合雙軌策略臨界點的日期並標記
-            annotations = []
-            for date, row in df_detail.dropna(subset=['MA20_plot', 'MA200', 'ATR_det', 'RSI_plot', 'High20_plot']).iterrows():
-                p_close = row['Close']
-                p_ma20 = row['MA20_plot']
-                p_ma200 = row['MA200']
-                p_atr = row['ATR_det']
-                p_rsi = row['RSI_plot']
-                p_high20 = row['High20_plot']
-                
-                low_bound = p_ma20 - (p_atr * atr_multiplier)
-                
-                # 軌道一：左側打折抄底（大趨勢多頭下拉回）
-                if p_ma20 >= p_ma200 and p_close <= low_bound:
-                    annotations.append(dict(
-                        x=date, y=row['Low'], text="🔥強買", showarrow=True,
-                        arrowhead=2, arrowcolor="green", arrowsize=1, arrowwidth=2,
-                        ax=0, ay=35, font=dict(color="white", size=9), bgcolor="green"
-                    ))
-                # 軌道二：右側動能突破（加上過熱安全閥過濾，拒絕 RSI > 78 的擁擠假突破）
-                elif p_ma20 >= p_ma200 and p_close > p_high20 and 60 <= p_rsi <= 78:
-                    annotations.append(dict(
-                        x=date, y=row['High'], text="⚡動能", showarrow=True,
-                        arrowhead=2, arrowcolor="#ff7f0e", arrowsize=1, arrowwidth=2,
-                        ax=0, ay=-35, font=dict(color="white", size=9), bgcolor="#ff7f0e"
-                    ))
-
-            fig.update_layout(
-                xaxis_rangeslider_visible=False, yaxis_title="價格", height=500, 
-                template="plotly_white", annotations=annotations
-            )
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2.5)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=3)))
+            fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
-            st.info("💡 雙軌安全指南：現在圖表上的金黃色【⚡動能】已經過濾掉「末跌段噴發」與「普通股假突破」。你可以切換不同股票，確認策略是否更加精準。")
             
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
             
-            rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
-            rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街分析師複合共識預期)" if rev_growth is not None else "未揭露未來展望"
+            # 1. 營收增長預期提取
+            rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth') or info.get('earningsQuarterlyGrowth')
+            if rev_growth is not None:
+                rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街法說前瞻預估)"
+            else:
+                rev_growth_str = "未揭露未來指引"
             
+            # 2. ⚡ 資本支出 (CapEx) 地毯式指引提取與安全降級校正算法
             capex_str = "未揭露未來指引"
-            try:
-                cf = stock_detail.quarterly_cashflow
-                if cf is None or cf.empty: cf = stock_detail.cashflow
-                if cf is not None and not cf.empty:
-                    m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                    if m_keys:
-                        latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
-                        if not is_tw_detail and latest_raw > 10000000000:
-                            latest_raw = latest_raw / 32.0
-                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
-                        elif is_tw_detail:
-                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (單季最新數據年化折算)"
-                        else:
-                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
-            except Exception: pass
+            
+            # 第一軌：地毯式搜索 yfinance 隱藏的前瞻指引/分析師預期
+            guidance_keys = [k for k in info.keys() if any(x in k.lower() for x in ['guidance', 'capex_estimate', 'forward_capex'])]
+            found_forward = False
+            if guidance_keys:
+                forward_val = info.get(guidance_keys[0])
+                if forward_val and str(forward_val).replace('.','').isdigit():
+                    forward_val = float(forward_val)
+                    if not is_tw_detail and forward_val > 10000000000: forward_val /= 32.0
+                    capex_str = f"{forward_val / 100000000:.1f} 億美元 (官方發布前瞻指引)" if not is_tw_detail else f"{forward_val / 100000000:.1f} 億新台幣 (官方發布前瞻指引)"
+                    found_forward = True
+            
+            # 第二軌備援：若官方尚未公佈前瞻，全自動切換至最新季度財報，並啟動年化運轉率 (Run Rate) 與幣別清洗
+            if not found_forward:
+                try:
+                    cf = stock_detail.quarterly_cashflow
+                    if cf is None or cf.empty: cf = stock_detail.cashflow
+                    if cf is not None and not cf.empty:
+                        m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                        if m_keys:
+                            latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
+                            # 🛡️ 數據清洗：防止 ADR 將新台幣錯植為美金標籤
+                            if not is_tw_detail and latest_raw > 10000000000:
+                                latest_raw = latest_raw / 32.0
+                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (未發布指引-改採季報年化折算)"
+                            elif is_tw_detail:
+                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (未發布指引-改採季報年化折算)"
+                            else:
+                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (未發布指引-改採季報年化折算)"
+                except Exception:
+                    pass
             
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx Run Rate)", capex_str)
+            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="地毯式定量指引算法：優先向財務資料庫調用官方發布之 Forward Guidance，若個股尚未發布，則自動切換至最新季度財報進行 Run Rate 洗鍊。")
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
                 
     except Exception as e: 
         st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
-# ⏳ 策略回測績效驗證 (支持安全型雙軌訊號回測)
+# ⏳ 策略回測績效驗證
 # ==============================================================================
 st.markdown("---")
-st.header("⏳ 策略回測績效驗證 (大數據多空循環驗證)")
-st.markdown("從您指定的日期開始往後掃描，找出每一檔股票**「第一次」觸發 🔥買入 或 ⚡動能突破 的日子與價位**，驗證策略真實報酬率！")
+st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
+st.markdown("從您指定的日期開始往後掃描，找出每一檔股票**「第一次」觸發 🔥買入 的日子與價位**，並對比今日收盤價，驗證策略真實報酬率！")
 
 backtest_col, _ = st.columns([1, 3])
 with backtest_col:
-    default_date = datetime.now().date() - timedelta(days=180) 
+    default_date = datetime.now().date() - timedelta(days=60) 
     backtest_date = st.date_input("📅 選擇掃描起始日期：", value=default_date)
 
 bt_date_str = backtest_date.strftime('%Y-%m-%d')
@@ -323,11 +351,10 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
             
             df_bt['MA20'] = df_bt['Close'].rolling(window=20).mean()
             df_bt['MA200'] = df_bt['Close'].rolling(window=200).mean()
-            df_bt['RSI'] = calculate_rsi(df_bt['Close'], 14)
-            df_bt['High20'] = df_bt['High'].shift(1).rolling(window=20).max()
-            
             hl = df_bt['High'] - df_bt['Low']
-            tr = pd.concat([hl, (df_bt['High'] - df_bt['Close'].shift(1)).abs(), (df_bt['Low'] - df_bt['Close'].shift(1)).abs()], axis=1).max(axis=1)
+            h_pc = (df_bt['High'] - df_bt['Close'].shift(1)).abs()
+            l_pc = (df_bt['Low'] - df_bt['Close'].shift(1)).abs()
+            tr = pd.concat([hl, h_pc, l_pc], axis=1).max(axis=1)
             df_bt['ATR'] = tr.rolling(window=atr_period).mean()
 
             df_scan = df_bt.loc[bt_date_str:]
@@ -341,21 +368,19 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 past_ma20 = row['MA20']
                 past_ma200 = row['MA200'] if not pd.isna(row['MA200']) else past_ma20
                 past_atr = row['ATR']
-                past_rsi = row['RSI']
-                past_high20 = row['High20']
                 
-                if pd.isna(past_ma20) or pd.isna(past_atr) or pd.isna(past_rsi) or pd.isna(past_high20): continue
+                if pd.isna(past_ma20) or pd.isna(past_atr): continue
                 
                 low_b = past_ma20 - (past_atr * atr_multiplier)
                 
-                signal = None
                 if past_ma20 >= past_ma200:
                     if past_close <= low_b:
                         signal = "🔥 強力買入"
-                    elif past_close > past_high20 and 60 <= past_rsi <= 78:
-                        signal = "⚡ 動能突破"
-                
-                if signal:
+                    elif abs(past_close - past_ma20)/past_ma20 <= 0.02:
+                        signal = "🟢 買入"
+                    else:
+                        continue 
+                        
                     return_pct = ((latest_today_price - past_close) / past_close) * 100
                     backtest_results.append({
                         "產業": ticker_sector, "代碼": ticker,
@@ -378,9 +403,9 @@ if backtest_results:
     
     col_r1, col_r2 = st.columns(2)
     if avg_return > 0:
-        col_r1.success(f"📈 雙軌策略平均報酬率：**{avg_return:.1f}%**")
+        col_r1.success(f"📈 策略平均報酬率：**{avg_return:.1f}%**")
     else:
-        col_r1.error(f"📉 雙軌策略平均報酬率：**{avg_return:.1f}%**")
-    col_r2.info(f"🎯 雙軌策略勝率：**{win_rate:.1f}%**")
+        col_r1.error(f"📉 策略平均報酬率：**{avg_return:.1f}%**")
+    col_r2.info(f"🎯 策略勝率 (正報酬比例)：**{win_rate:.1f}%**")
 else:
-    st.info(f"自 {bt_date_str} 起算，觀察名單內無任何標的觸發雙軌買入條件。")
+    st.info(f"自 {bt_date_str} 起算，觀察名單內無任何標的觸發買入條件。請嘗試將日期往前推！")
