@@ -74,7 +74,6 @@ with salp_col2:
 
 st.markdown("---")
 
-# 🛠️ 修正需求 (3)：新增您指定的所有個股，並進行精準硬核產業分類
 INITIAL_SECTOR_MAP = {
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
@@ -107,7 +106,7 @@ INITIAL_SECTOR_MAP = {
     "COIN": "數位資產科技", "MSTR": "數位資產科技", 
     "BRK-B": "綜合控股投資", "GLD": "綜合控股投資", "SHLD": "綜合控股投資",
     "2330.TW": "晶圓代工製程", "0050.TW": "市值型大盤", "2851.TW": "金融再保險", "5607.TW": "航空航運物流",
-    "TTMI": "電子製造代工", "CLS": "電子製造代工", "SANM": "電子製造代工"
+    "TTMI": "電子製造代工", "CLS": "電子製造代工", "SANM": "電子製造代工", "BYDDF": "智能車新能源"
 }
 
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
@@ -123,15 +122,14 @@ with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
 
-distinct_sectors = ["全部顯示"] + sorted(list(set(st.session_state.sector_map.values())))
-selected_sector_filter = st.sidebar.selectbox("🎯 聚焦特定產業類別：", distinct_sectors)
-
 st.sidebar.header("📊 對稱網格參數設定")
-atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
-atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x) [💡建議調大至1.8-2.2以優化勝率]", 0.5, 3.0, 1.4, 0.1)
+# 🛠️ 修正需求 (4)：ATR 計算天數固定為 14 天，移除滑桿
+atr_period = 14
+st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天（精簡標註優化）")
+atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, 1.4, 0.1)
 
-# 🛠️ 修正需求 (2)：RSI 預設過濾限制直接卡在 25
-rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (低於此值才觸發強買)", 15, 45, 25, 1)
+# 🛠️ 修正需求 (3)：RSI 預設為 32（賣壓），並清楚標註 25 為恐慌賣壓
+rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (預設32常態賣壓 / 25極端恐慌賣壓)", 15, 45, 32, 1)
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
@@ -160,7 +158,6 @@ with st.spinner("正在提煉核心決策..."):
     for ticker in active_tickers:
         try:
             ticker_sector = st.session_state.sector_map.get(ticker, "未分類")
-            if selected_sector_filter != "全部顯示" and ticker_sector != selected_sector_filter: continue
 
             is_tw = ".TW" in ticker or ".TWO" in ticker
             currency_symbol = "NT$ " if is_tw else "$ "
@@ -214,41 +211,35 @@ with st.spinner("正在提煉核心決策..."):
             spy_current_ma200 = spy_df_global['MA200'].iloc[-1]
             is_market_safe = spy_current_close >= spy_current_ma200 if not pd.isna(spy_current_ma200) else True
             
+            # 短線技術超賣指標
             is_extreme_panic = (current_price <= low_absorb_price or current_price <= current_bb_lower) and current_rsi <= rsi_filter_val
             if use_market_filter and not is_market_safe:
                 is_extreme_panic = False 
             
+            # 🛠️ 修正需求 (2)：校正空頭推薦強買的矛盾邏輯
             if ma20_center >= latest_ma200:
                 market_state = "📈 多頭波段 (會漲)"
                 if is_extreme_panic: 
                     final_action = "🔥 強力買入"
-                    reason_str = "多頭恐慌暴跌洗盤！股價砸入大底部防守區，黃金埋伏點！"
+                    reason_str = "多頭回檔極度深邃，觸及戰略買點。"
                 elif abs(current_price - ma20_center)/ma20_center <= 0.02: 
                     final_action = "🟢 買入"
-                    reason_str = "股館拉回到關鍵 20MA 支撐區，符合建倉邏輯。"
+                    reason_str = "多頭回試 20MA 關鍵支撐。"
                 elif current_price >= high_toss_price: 
                     final_action = "🔴 賣出"
-                    reason_str = "短線噴發過熱，衝破網格上限，波段高拋。"
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = "多頭結構健全，安心持股。"
             else:
                 market_state = "📉 空頭結構 (會跌)"
-                if is_extreme_panic:
-                    final_action = "🔥 強力買入"
-                    reason_str = "空頭極度超賣砸出大黃金坑，解鎖極端暴跌強烈買入限制。"
-                elif yesterday_close >= ma20_center and current_price < ma20_center: 
+                # 🛡️ 鐵律鎖定：既然是會跌的空頭結構，堅決不允許「強力買入」，防止左側無底深淵接飛刀
+                if yesterday_close >= ma20_center and current_price < ma20_center: 
                     final_action = "🚨 強力賣出"
-                    reason_str = "剛破 20MA 決策線，趨勢偏空。"
                 elif current_price >= high_toss_price: 
                     final_action = "🔴 賣出"
-                    reason_str = "空頭反彈觸及網格上限，逃命高拋點。"
                 elif abs(current_price - ma20_center)/ma20_center <= 0.02:
-                    final_action = "🟢 買入"
-                    reason_str = "空頭中短線超跌反彈至20MA支撐區嘗試性建倉。"
+                    final_action = "🟢 買入" # 空頭反彈至均線支撐的極小倉試探
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = "空頭下跌結構中，堅決保持空倉觀望。"
 
             if final_action in ["🔥 強力買入", "🟢 買入"]:
                 action_alerts.append({
@@ -265,7 +256,7 @@ with st.spinner("正在提煉核心決策..."):
                 "產業領域": ticker_sector, "代碼": ticker, "當前股價": f"{currency_symbol}{current_price:.1f}",
                 "公允價值區間": fair_value_str, "移動停利價位": trailing_stop_str, "昨收盤價": f"{currency_symbol}{yesterday_close:.1f}",
                 "MA20": f"{currency_symbol}{ma20_center:.1f}", "市場狀態": market_state, "綜合建議": final_action,
-                "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}", "精簡決策原因": reason_str
+                "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}"
             })
         except Exception: pass
 
@@ -273,16 +264,19 @@ st.header("🚨 今日促銷")
 if action_alerts:
     st.dataframe(pd.DataFrame(action_alerts), use_container_width=True, hide_index=True)
 else:
-    st.info("🧘 報告隊長：今日名單內皆無觸發『強力買入』或『買入』的特價促銷標的。請保持耐性。")
+    st.info("🧘 報告隊長：今日名單內皆無符合多頭拉回的『強力買入』或『買入』促銷標的。")
 
 st.markdown("---")
 
-st.header(f"📊 降維極簡大看板 (目前聚焦：{selected_sector_filter})")
+# 🛠️ 修正需求 (5)：將大看板升級為『表頭內建動態多維篩選與排序』，徹底免除下拉選單的低效困境
+st.header("📊 降維極簡大看板 (點擊表頭漏斗 ⏳ 可即時打字篩選與交叉排序)")
 if summary_data:
     summary_df = pd.DataFrame(summary_data)
     summary_df['sort'] = summary_df['綜合建議'].map(action_rank)
     summary_df = summary_df.sort_values(by=["sort", "產業領域", "代碼"]).drop('sort', axis=1)
-    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    
+    # 核心黑科技：啟用 column 級別互動濾網
+    st.dataframe(summary_df, use_container_width=True, hide_index=True, filter="column")
 
 st.markdown("---")
 
@@ -295,7 +289,7 @@ sorted_tickers = sorted(active_tickers)
 default_index = sorted_tickers.index("TSM") if "TSM" in sorted_tickers else 0
 
 selected_stock = st.selectbox(
-    "選擇個股查看決策軌道：", 
+    "選擇個股查看歷史決策軌道：", 
     options=sorted_tickers, 
     index=default_index
 )
@@ -317,9 +311,11 @@ if selected_stock:
             df_detail['ATR_det'] = tr_det.rolling(window=atr_period).mean()
             df_detail['Low_Absorb'] = df_detail['MA20_plot'] - (df_detail['ATR_det'] * atr_multiplier)
             
+            # 火焰標記點同樣遵循修正邏輯：必須在多頭趨勢下（MA20 >= MA200）的恐慌暴跌，才是健康強買點
             price_cond = (df_detail['Close'] <= df_detail['Low_Absorb']) | (df_detail['Close'] <= df_detail['BB_Lower'])
             rsi_cond = df_detail['RSI'] <= rsi_filter_val
-            df_detail['Strong_Buy_Signal'] = price_cond & rsi_cond
+            trend_cond = df_detail['MA20_plot'] >= df_detail['MA200']
+            df_detail['Strong_Buy_Signal'] = trend_cond & price_cond & rsi_cond
             
             buy_signals = df_detail[df_detail['Strong_Buy_Signal']]
 
@@ -329,13 +325,13 @@ if selected_stock:
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=2.5)))
             
-            # 🛠️ 修正需求 (1)：圖上只要金色正三角形不要字，將標記移至右上角圖例
+            # 🛠️ 修正需求 (1)：全面拔除三角形，改用純粹的金色火焰圖案標註
             if not buy_signals.empty:
                 fig.add_trace(go.Scatter(
                     x=buy_signals.index,
                     y=buy_signals['Low'] * 0.96,  
                     mode='markers',
-                    marker=dict(symbol='triangle-up', size=13, color='gold', line=dict(color='darkgoldenrod', width=1.5)),
+                    marker=dict(symbol='fire', size=14, color='orange', line=dict(color='crimson', width=1)),
                     name='🔥 強力買入點'
                 ))
                 
@@ -424,7 +420,6 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
     for ticker in active_tickers:
         try:
             ticker_sector = st.session_state.sector_map.get(ticker, "未分類")
-            if selected_sector_filter != "全部顯示" and ticker_sector != selected_sector_filter: continue
 
             df_bt = yf.Ticker(ticker).history(start=(backtest_date - timedelta(days=300)).strftime('%Y-%m-%d'))
             if df_bt.empty: continue
@@ -467,7 +462,8 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 else:
                     is_market_safe_past = True
                 
-                is_past_strong_buy = (past_close <= low_b or past_close <= past_bb_lower) and past_rsi <= rsi_filter_val
+                # 🛠️ 回測端同步嚴格執行：只有多頭趨勢才允許強力買入
+                is_past_strong_buy = (past_ma20 >= past_ma200) and (past_close <= low_b or past_close <= past_bb_lower) and past_rsi <= rsi_filter_val
                 if use_market_filter and not is_market_safe_past:
                     is_past_strong_buy = False 
                 
@@ -477,7 +473,7 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 if signal_choice == "買入 + 強力買入":
                     if is_past_strong_buy: signal = "🔥 強力買入"
                     elif is_past_normal_buy: signal = "🟢 買入"
-                elif signal_choice == "單舊買入" and is_past_normal_buy and not is_past_strong_buy:
+                elif signal_choice == "單獨買入" and is_past_normal_buy and not is_past_strong_buy:
                     signal = "🟢 買入"
                 elif signal_choice == "單獨強力買入" and is_past_strong_buy:
                     signal = "🔥 強力買入"
@@ -512,4 +508,4 @@ if backtest_results:
     col_r2.info(f"🎯 策略勝率 (正報酬比例)：**{win_rate:.1f}%**")
     col_r3.metric(label="📊 同期對比 S&P 500 (SPY) 報酬率", value=f"{spy_performance_pct:.1f}%")
 else:
-    st.info(f"自 {bt_date_str} 起算，觀察名單內無任何標的觸發您選擇的 【{signal_choice}】 條件。請嘗試移動日期！")
+    st.info(f"自 {bt_date_str} 起算，觀察名單內無任何標的觸發您選擇的條件。")
