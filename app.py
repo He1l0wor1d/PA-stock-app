@@ -295,7 +295,18 @@ if summary_data:
 st.markdown("---")
 
 st.header("🔍 個股動態決策軌道與核心基本面")
-selected_stock = st.selectbox("選擇個股查看決策軌道：", sorted(active_tickers))
+
+# 先將 active_tickers 進行排序
+sorted_tickers = sorted(active_tickers)
+
+# 尋找 TSM 在清單中的索引位置，若找不到則預設為 0
+default_index = sorted_tickers.index("TSM") if "TSM" in sorted_tickers else 0
+
+selected_stock = st.selectbox(
+    "選擇個股查看決策軌道：", 
+    sorted_tickers, 
+    index=default_index
+)
 
 if selected_stock:
     try:
