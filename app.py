@@ -276,7 +276,7 @@ if selected_stock:
             # 1. 營收增長預期提取
             rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth') or info.get('earningsQuarterlyGrowth')
             if rev_growth is not None:
-                rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街法說前瞻預估)"
+                rev_growth_str = f"{rev_growth * 100:.1f}%"
             else:
                 rev_growth_str = "未揭露未來指引"
             
@@ -291,7 +291,7 @@ if selected_stock:
                 if forward_val and str(forward_val).replace('.','').isdigit():
                     forward_val = float(forward_val)
                     if not is_tw_detail and forward_val > 10000000000: forward_val /= 32.0
-                    capex_str = f"{forward_val / 100000000:.1f} 億美元 (官方發布前瞻指引)" if not is_tw_detail else f"{forward_val / 100000000:.1f} 億新台幣 (官方發布前瞻指引)"
+                    capex_str = f"{forward_val / 100000000:.1f} 億美元" if not is_tw_detail else f"{forward_val / 100000000:.1f} 億新台幣"
                     found_forward = True
             
             # 第二軌備援：若官方尚未公佈前瞻，全自動切換至最新季度財報，並啟動年化運轉率 (Run Rate) 與幣別清洗
@@ -306,11 +306,11 @@ if selected_stock:
                             # 🛡️ 數據清洗：防止 ADR 將新台幣錯植為美金標籤
                             if not is_tw_detail and latest_raw > 10000000000:
                                 latest_raw = latest_raw / 32.0
-                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (未發布指引-改採季報年化折算)"
+                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元"
                             elif is_tw_detail:
-                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (未發布指引-改採季報年化折算)"
+                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣"
                             else:
-                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (未發布指引-改採季報年化折算)"
+                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元"
                 except Exception:
                     pass
             
