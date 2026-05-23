@@ -324,35 +324,36 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
-            info = stock_detail.info if stock_detail.info else {}
+           info = stock_detail.info if stock_detail.info else {}
             
             # 基本面防空鎖升級
             rev_growth = info.get('revenueGrowth')
             rev_growth_str = f"{rev_growth * 100:.1f}%" if rev_growth is not None else "無數據"
                 
-# 統一幣別標示（依照你的要求單位為億美元，若台股則自動換算或標示）
-is_tw_detail = ".TW" in selected_stock or ".TW" in selected_stock
-curr_str = "NT$" if is_tw_detail else "美元"
+            # 判斷是否為台股
+            is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
+            curr_str = "NT$" if is_tw_detail else "美元"
+            capex_str = "無數據"
 
-capex_str = "無數據"
-try:
-    # 優先嘗試從 info 獲取最新滾動/年度資本支出預估 (ttm 或最新財年)
-    info_capex = info.get('capitalExpenditure')
-    
-    if info_capex and pd.notna(info_capex):
-        capex_str = f"{abs(info_capex) / 100000000:.1f} 億{curr_str}"
-    else:
-        # 若 info 沒有，則抓取季報並加總最近 4 季，推估為 2026 全年表現
-        cf_q = stock_detail.quarterly_cashflow
-        if cf_q is not None and not cf_q.empty:
-            matching_keys = [k for k in cf_q.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-            if matching_keys:
-                # 累加最近 4 季的資本支出
-                annual_capex = cf_q.loc[matching_keys[0]].dropna().head(4).sum()
-                if annual_capex != 0:
-                    capex_str = f"{abs(annual_capex) / 100000000:.1f} 億{curr_str}"
-except Exception: 
-    pass
+            # 嘗試計算 2026 全年（滾動四季）資本支出
+            try:
+                cf_q = stock_detail.quarterly_cashflow
+                if cf_q is not None and not cf_q.empty:
+                    # 尋找包含 Capital Expenditure 的欄位
+                    matching_keys = [k for k in cf_q.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                    if matching_keys:
+                        # 抓取最近 4 季數據並加總，推估為 2026 全年總額
+                        annual_capex = cf_q.loc[matching_keys[0]].dropna().head(4).sum()
+                        if annual_capex != 0:
+                            capex_str = f"{abs(annual_capex) / 100000000:.1f} 億{curr_str}"
+                
+                # 如果季報抓不到，降級使用 info 裡的年度欄位
+                if capex_str == "無數據":
+                    info_capex = info.get('capitalExpenditure')
+                    if info_capex and pd.notna(info_capex):
+                        capex_str = f"{abs(info_capex) / 100000000:.1f} 億{curr_str}"
+            except Exception:
+                capex_str = "無數據"
                 
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
@@ -361,8 +362,6 @@ except Exception:
             col_f1.metric("營收年增率 (YoY)", rev_growth_str)
             col_f2.metric("2026 全年資本支出", capex_str, help="反映企業 2026 全年對 AI 算力基礎設施與廠房的投入總力道")
             col_f3.metric("當前估值 (PE Ratio)", pe_str)
-                
-    except Exception as e: st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
 # ⏳ 策略回測績效驗證 (Scan-Forward 尋找首個買點機制)
