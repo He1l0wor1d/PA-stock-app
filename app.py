@@ -253,7 +253,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (安全獨立阻斷與兜底保護版)
+# 🔍 個股動態決策軌道與核心基本面 (通用 AI 聯網 + Yahoo Finance 雙軌純自動版)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 
@@ -276,7 +276,7 @@ def get_live_guidance_via_ai(stock_code):
         )
         
         prompt = f"""
-        請即時搜尋網路最新財經快訊與官方公告，查詢股票代碼 {stock_code} 最新法說會公布的：
+        請即時搜尋網路最新財經新聞與官方公告，查詢股票代碼 {stock_code} 最新法說會公布的：
         1. 2026 全年資本支出指引 (CapEx Guidance)
         2. 2026 全年營收年增率預期 (YoY Revenue Growth)
         
@@ -294,20 +294,10 @@ def get_live_guidance_via_ai(stock_code):
         capex_val = capex_match.group(1).strip() if capex_match else None
         growth_val = growth_match.group(1).strip() if growth_match else None
         
-        # 💡 核心防禦：如果 AI 解析結果為空或不正常，針對台積電自動啟用黃金兜底，其餘呈現未揭露
-        if stock_code in ["TSM", "2330.TW"]:
-            if not capex_val or any(x in capex_val for x in ["無", "未", "錯誤", "數據"]):
-                capex_val = "520億 ~ 560億美元 (法說會最新指引，往高標靠攏)"
-            if not growth_val or any(x in growth_val for x in ["無", "未", "錯誤", "數據"]):
-                growth_val = "大於 30% (全年美元營收指引上修)"
-                
-        return capex_val or "未揭露指引", growth_val or "未揭露指引"
+        return capex_val, growth_val
         
     except Exception:
-        # 💡 例外安全兜底層
-        if stock_code in ["TSM", "2330.TW"]:
-            return "520億 ~ 560億美元 (法說會最新指引，往高標靠攏)", "大於 30% (全年美元營收指引上修)"
-        return "未揭露指引", "未揭露指引"
+        return None, None
 
 if selected_stock:
     try:
@@ -325,16 +315,44 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
-            with st.spinner("🚀 AI 正在聯網查閱最新法說會與財報指引..."):
-                capex_str, rev_growth_str = get_live_guidance_via_ai(selected_stock)
+            # 🚀 雙軌備援引擎：優先交給 AI 聯網抓取
+            with st.spinner("🚀 AI 正在聯網查閱最新官方指引展望..."):
+                ai_capex, ai_growth = get_live_guidance_via_ai(selected_stock)
             
             info = stock_detail.info if stock_detail.info else {}
+            is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
+            curr_str = "NT$" if is_tw_detail else "美元"
+            
+            # 1. 處理營收年增率預期欄位 (AI ➔ Yahoo Finance Backup)
+            if ai_growth and not any(x in ai_growth for x in ["無", "未", "數據", "錯誤"]):
+                rev_growth_str = f"📡 聯網最新預期: {ai_growth}"
+            else:
+                rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
+                rev_growth_str = f"{rev_growth * 100:.1f}% (API 歷史財報)" if rev_growth is not None else "暫無數據"
+            
+            # 2. 處理資本支出指引欄位 (AI ➔ Yahoo Finance Backup)
+            if ai_capex and not any(x in ai_capex for x in ["無", "未", "數據", "錯誤"]):
+                capex_str = f"📡 聯網最新預期: {ai_capex}"
+            else:
+                capex_str = "暫無數據"
+                try:
+                    cf = stock_detail.quarterly_cashflow
+                    if cf is None or cf.empty: cf = stock_detail.cashflow
+                    if cf is not None and not cf.empty:
+                        m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                        if m_keys:
+                            latest_raw = cf.loc[m_keys[0]].dropna().iloc[0]
+                            if pd.notna(latest_raw) and latest_raw != 0:
+                                capex_str = f"{abs(latest_raw) / 100000000:.1f} 億{curr_str} (API 歷史已發生值)"
+                except Exception:
+                    pass
+            
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="AI 即時聯網查閱官方最新 Forward Guidance 指引")
+            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="系統自動啟用雙軌引擎：優先採集 AI 即時網絡檢索，未果則自動向 Yahoo Finance API 資料庫調用歷史財報折算。")
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
                 
     except Exception as e: 
