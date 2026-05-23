@@ -1,4 +1,4 @@
-import streamlit as st
+app.py：Pythonimport streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
@@ -95,13 +95,14 @@ all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
 
 # ==============================================================================
-# 🎒 (核心功能) 側邊欄：持股清單與大盤基準快取
+# 🎯 核心功能新增：側邊欄「我的核心持股清單」
 # ==============================================================================
 st.sidebar.markdown("---")
-st.sidebar.header("🎒 我的核心持有庫存")
+st.sidebar.header("🎒 我的實戰持股庫存")
 default_my_stocks = ["TSM", "NVDA", "2330.TW", "AAPL"]
+# 確保預設持股都在 active_tickers 內
 default_my_stocks = [s for s in default_my_stocks if s in active_tickers]
-my_holdings = st.sidebar.multiselect("勾選您目前已建立部位的個股：", options=active_tickers, default=default_my_stocks)
+my_holdings = st.sidebar.multiselect("勾選/輸入目前已持有的股票：", options=active_tickers, default=default_my_stocks)
 
 distinct_sectors = ["全部顯示"] + sorted(list(set(st.session_state.sector_map.values())))
 selected_sector_filter = st.sidebar.selectbox("🎯 聚焦特定產業類別：", distinct_sectors)
@@ -115,19 +116,7 @@ summary_data = []
 action_alerts = []
 action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
 
-# 事先快取基準大盤數據以計算相對強度 (RS)
-@st.cache_data(ttl=3600)
-def get_benchmarks(start):
-    tw_bench = yf.Ticker("0050.TW").history(start=start)['Close'].pct_change().fillna(0)
-    us_bench = yf.Ticker("QQQ").history(start=start)['Close'].pct_change().fillna(0)
-    return tw_bench, us_bench
-
-try:
-    tw_benchmark_returns, us_benchmark_returns = get_benchmarks(start_date)
-except Exception:
-    tw_benchmark_returns, us_benchmark_returns = pd.Series(), pd.Series()
-
-with st.spinner("正在提煉極簡 Action 決策與運算強弱動能指標..."):
+with st.spinner("正在提煉五等核心 ACTION 決策與運算強弱動能..."):
     for ticker in active_tickers:
         try:
             ticker_sector = st.session_state.sector_map.get(ticker, "未分類")
@@ -138,35 +127,16 @@ with st.spinner("正在提煉極簡 Action 決策與運算強弱動能指標..."
             
             stock = yf.Ticker(ticker)
             df = stock.history(start=start_date)
-            if df.empty or len(df) < 150: continue
-            
-            # ==========================================
-            # 🚀 運算全新升級指標：RS 相對強度 與 52W 高點距離
-            # ==========================================
-            # 1. 52週高點距離百分比
-            high_52w = df['High'].max()
-            current_price = float(df.iloc[-1]['Close'])
-            dist_to_52w = ((high_52w - current_price) / high_52w) * 100
-            
-            # 2. RS 相對強度 (過去 30 個交易日相較於大盤基準的超額報酬績效)
-            stock_returns = df['Close'].pct_change().fillna(0).tail(30)
-            bench_returns = tw_benchmark_returns.tail(30) if is_tw else us_benchmark_returns.tail(30)
-            
-            # 確保對齊長度
-            min_len = min(len(stock_returns), len(bench_returns))
-            if min_len > 0:
-                rs_score = float((stock_returns.tail(min_len) - bench_returns.tail(min_len)).sum() * 100)
-                rs_display = f"🔥 強於大盤 (+{rs_score:.1f}%)" if rs_score > 0 else f"❄️ 弱於大盤 ({rs_score:.1f}%)"
-            else:
-                rs_display = "數據不足"
+            if df.empty or len(df) < 220: continue
 
-            # 網格核心指標運算
+            # 指標運算
             high_low = df['High'] - df['Low']
             tr = pd.concat([high_low, (df['High'] - df['Close'].shift(1)).abs(), (df['Low'] - df['Close'].shift(1)).abs()], axis=1).max(axis=1)
             df['ATR'] = tr.rolling(window=atr_period).mean()
             df['MA20_actual'] = df['Close'].rolling(window=20).mean()
             df['MA200'] = df['Close'].rolling(window=200).mean()
             
+            current_price = float(df.iloc[-1]['Close'])  
             yesterday_close = float(df.iloc[-2]['Close'])      
             ma20_center = float(df.iloc[-1]['MA20_actual'])
             latest_atr = float(df.iloc[-1]['ATR'])
@@ -174,63 +144,74 @@ with st.spinner("正在提煉極簡 Action 決策與運算強弱動能指標..."
             
             highest_20d = float(df['High'].rolling(window=20).max().iloc[-1])
             trailing_stop_price = highest_20d - (2 * latest_atr)
+            trailing_stop_str = f"{currency_symbol}{trailing_stop_price:.1f}"
 
             low_absorb_price = ma20_center - (latest_atr * atr_multiplier)
             high_toss_price = ma20_center + (latest_atr * atr_multiplier)
             
+            market_state = "⚪ 觀望"
             final_action = "⚪ 觀望"
             
-            # 多空核心決策分流
             if ma20_center >= latest_ma200:
-                if current_price <= low_absorb_price: final_action = "🔥 強力買入"
-                elif abs(current_price - ma20_center)/ma20_center <= 0.02: final_action = "🟢 買入"
-                elif current_price >= high_toss_price: final_action = "🔴 賣出"
-                elif current_price <= trailing_stop_price: final_action = "🚨 強力賣出"
+                market_state = "📈 多頭波段"
+                if current_price <= low_absorb_price: 
+                    final_action = "🔥 強力買入"
+                elif abs(current_price - ma20_center)/ma20_center <= 0.02: 
+                    final_action = "🟢 買入"
+                elif current_price >= high_toss_price: 
+                    final_action = "🔴 賣出"
+                elif current_price <= trailing_stop_price:
+                    final_action = "🛑 移動停利"
             else:
-                if yesterday_close >= ma20_center and current_price < ma20_center: final_action = "🚨 強力賣出"
-                elif current_price >= high_toss_price: final_action = "🔴 賣出"
-                elif current_price <= low_absorb_price: final_action = "🟢 買入"
+                market_state = "📉 空頭結構"
+                if yesterday_close >= ma20_center and current_price < ma20_center: 
+                    final_action = "🚨 強力賣出"
+                elif current_price >= high_toss_price: 
+                    final_action = "🔴 賣出"
+                elif current_price <= low_absorb_price: 
+                    final_action = "🟢 買入"
 
             # ==================================================================
-            # 🎯 實戰降維分流篩選：只放重點關注、已買持股健檢通知 (限10個以內)
+            # 🎯 實戰降維分流邏輯：只有觸發買入，或是「持有股票」觸發賣出，才會進 ACTION 面板
             # ==================================================================
             is_held = ticker in my_holdings
-            is_alert_triggered = False
+            should_alert = False
             
             if final_action in ["🔥 強力買入", "🟢 買入"]:
-                is_alert_triggered = True  # 有新買點隨時觸發
-            elif final_action in ["🔴 賣出", "🚨 強力賣出"] and is_held:
-                is_alert_triggered = True  # 有風險訊號，且「確有持股」才顯示
+                should_alert = True  # 有買點隨時通知，不管有沒有持有
+            elif final_action in ["🔴 賣出", "🚨 強力賣出", "🛑 移動停利"] and is_held:
+                should_alert = True  # 賣點與停利，只有當「已持有」才跳出通知
 
-            if is_alert_triggered:
+            if should_alert:
                 action_alerts.append({
-                    "庫存狀態": "🎒 已持有" if is_held else "🔍 觀察中",
-                    "代碼": ticker,
-                    "執行決策": final_action,
-                    "當前市價": f"{currency_symbol}{current_price:.1f}",
-                    "網格臨界提示": f"低吸價:{currency_symbol}{low_absorb_price:.1f} / 高拋價:{currency_symbol}{high_toss_price:.1f}",
-                    "移動停利防線": f"{currency_symbol}{trailing_stop_price:.1f}" if is_held else "未持股不計"
+                    "🔔 庫存狀態": "🎒 已持股" if is_held else "🔍 觀察中",
+                    "代碼": ticker, 
+                    "綜合建議": final_action, 
+                    "當前股價": f"{currency_symbol}{current_price:.1f}",
+                    "移動停利價位": trailing_stop_str if is_held else "未持有不計", 
+                    "網格臨界點": f"高拋價:{currency_symbol}{high_toss_price:.1f} / 低吸價:{currency_symbol}{low_absorb_price:.1f}"
                 })
 
             summary_data.append({
                 "產業領域": ticker_sector, "代碼": ticker, "當前股價": f"{currency_symbol}{current_price:.1f}",
-                "RS 相對大盤強弱": rs_display, "距52W高點": f"{dist_to_52w:.1f}%",
-                "綜合建議": final_action, "買點": f"{currency_symbol}{low_absorb_price:.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}"
+                "移動停利價位": trailing_stop_str, "MA20": f"{currency_symbol}{ma20_center:.1f}", 
+                "市場狀態": market_state, "綜合建議": final_action,
+                "買點": f"{currency_symbol}{low_absorb_price:.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}"
             })
         except Exception: pass
 
 # --- 介面排版輸出 ---
-st.header("🚨 今日核心執行 ACTION 面板 (精簡庫存健檢版)")
+st.header("🚨 今日核心執行 ACTION 面板 (精簡實戰版)")
 if action_alerts:
-    # 嚴格限制最多呈現 10 檔最急迫需要做動作的核心標的
+    # 限制最多顯示 10 檔最危急/最重要的標的
     df_alert = pd.DataFrame(action_alerts).head(10)
     st.dataframe(df_alert, use_container_width=True, hide_index=True)
 else:
-    st.info("🧘 報告隊長：今日已持股庫存與觀察清單皆無突破臨界點，請繼續安心保持空倉/持股。")
+    st.info("🧘 報告隊長：今日名單中皆無個股觸發臨界點。請繼續安心保持觀望。")
 
 st.markdown("---")
 
-st.header(f"📊 降維極簡大看板 (已整合全新前瞻強弱指標)")
+st.header(f"📊 降維極簡大看板 (目前聚焦：{selected_sector_filter})")
 if summary_data:
     summary_df = pd.DataFrame(summary_data)
     st.dataframe(summary_df, use_container_width=True, hide_index=True)
@@ -248,7 +229,7 @@ if selected_stock:
         stock_detail = yf.Ticker(selected_stock)
         df_detail = stock_detail.history(start=start_date)
         
-        if not df_detail.empty and len(df_detail) > 100:
+        if not df_detail.empty and len(df_detail) > 200:
             df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
             df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
             
@@ -281,7 +262,7 @@ if selected_stock:
                     capex_str = "520億 ~ 560億 美元 (官方指引)"
                 else:
                     info_capex = info.get('capitalExpenditure')
-                    if info_capex and pd.notna(info_capex):
+                    if info_capex and pd.notna(info_capex) and abs(info_capex) > (calculated_capex if 'calculated_capex' in locals() else 0):
                         capex_str = f"{abs(info_capex) / 100000000:.1f} 億{curr_str} (市場共識預估)"
             except Exception:
                 capex_str = "無數據"
