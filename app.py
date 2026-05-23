@@ -250,7 +250,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (標準定量財經引擎 - 100% 穩定免維護)
+# 🔍 個股動態決策軌道與核心基本面 (定量財務計量引擎 - 100% 穩定免維護)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 
@@ -385,26 +385,4 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                         "產業": ticker_sector, "代碼": ticker,
                         "建倉日期": date.strftime('%Y-%m-%d'), "當時訊號": signal,
                         "買入價": f"{currency}{past_close:.1f}", "今日最新價": f"{currency}{latest_today_price:.1f}",
-                        "累積報酬率": f"{return_pct:.1f}%"
-                    })
-                    break 
-
-        except Exception: pass
-
-if backtest_results:
-    df_bt_results = pd.DataFrame(backtest_results)
-    df_bt_results['sort_val'] = df_bt_results['累積報酬率'].str.replace('%', '').astype(float)
-    df_bt_results = df_bt_results.sort_values(by='sort_val', ascending=False).drop('sort_val', axis=1)
-    st.dataframe(df_bt_results, use_container_width=True, hide_index=True)
-    
-    avg_return = df_bt_results['累積報酬率'].str.replace('%', '').astype(float).mean()
-    win_rate = (df_bt_results['累積報酬率'].str.replace('%', '').astype(float) > 0).mean() * 100
-    
-    col_r1, col_r2 = st.columns(2)
-    if avg_return > 0:
-        col_r1.success(f"📈 策略平均報酬率：**{avg_return:.1f}%**")
-    else:
-        col_r1.error(f"📉 策略平均報酬率：**{avg_return:.1f}%**")
-    col_r2.info(f"🎯 策略勝率 (正報酬比例)：**{win_rate:.1f}%**")
-else:
-    st.info(f"自 {bt_date_str} 起算，觀察名單內無任何標的觸發買入條件。請嘗試將日期往前推！")
+                        "累積報酬率": f"{return_pct:.
