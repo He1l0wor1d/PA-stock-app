@@ -63,7 +63,7 @@ with st.expander("✨ 系統實戰使用指南 📖 ", expanded=False):
 st.markdown("---")
 
 # ==============================================================================
-# ✨ 第三層：AGI 2027 敘事與 SALP 聰明錢觀測站 (內化版)
+# ✨ 第三層：AGI 2027 敘事與 SALP 聰明錢觀測站
 # ==============================================================================
 st.markdown("### 🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站")
 salp_col1, salp_col2 = st.columns([1, 1.8])
@@ -253,7 +253,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (高智能 AI 語意 + 歷史財報安全洗鍊版)
+# 🔍 個股動態決策軌道與核心基本面 (通用 AI 聯網 + 歷史財報安全洗鍊雙軌版)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 
@@ -276,11 +276,11 @@ def get_live_guidance_via_ai(stock_code):
         )
         
         prompt = f"""
-        請即時搜尋網路最新財經新聞、華爾街分析師共識與官方公告，查詢股票代碼 {stock_code} 最新公布的：
+        請即時搜尋網路最新財經新聞、華爾街分析師共識與官方公告，查詢股票代碼 {stock_code} 最新法說會或官方公布的：
         1. 2026 全年資本支出指引 (CapEx Guidance)
         2. 2026 全年營收年增率預期 (YoY Revenue Growth)
         
-        請直接分兩行回答我，格式如下，不要包含任何 Markdown 標籤或星號：
+        請直接分兩行回答我，格式如下，不要包含任何 Markdown 標籤、星號、括號或多餘解釋：
         資本支出：[在此處填寫數據與單位，例如: 520億 ~ 560億美元]
         營收成長：[在此處填寫數據與單位，例如: 大於 30%]
         """
@@ -320,15 +320,16 @@ if selected_stock:
             
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
+            curr_str = "NT$" if is_tw_detail else "美元"
             
-            # 1. 處理營收年增率預期欄位 (AI ➔ Yahoo Finance Backup)
+            # 1. 營收年增率預期欄位 (AI ➔ Yahoo Finance Backup)
             if ai_growth and not any(x in ai_growth for x in ["無", "未", "數據", "錯誤"]):
                 rev_growth_str = f"📡 聯網最新指引: {ai_growth}"
             else:
                 rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
                 rev_growth_str = f"{rev_growth * 100:.1f}% (API 歷史財報)" if rev_growth is not None else "暫無數據"
             
-            # 2. 處理資本支出指引欄位 (AI ➔ Yahoo Finance 歷史財報安全洗鍊層)
+            # 2. 資本支出指引欄位 (AI ➔ Yahoo Finance 歷史財報安全校正)
             if ai_capex and not any(x in ai_capex for x in ["無", "未", "數據", "錯誤"]):
                 capex_str = f"📡 聯網最新指引: {ai_capex}"
             else:
@@ -341,14 +342,14 @@ if selected_stock:
                         if m_keys:
                             latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
                             
-                            # 🛡️ 萬用安全洗鍊：如果美股/ADR 出現大於 1000 億這種明顯是台幣錯置的驚人數字，自動除以匯率 (以 32 估算) 換算回美元
+                            # 🛡️ 數據庫洗鍊：防範 ADR 將新台幣誤植為美元標籤（若美股數據 > 100 億美金，自動除以 32 匯率校正）
                             if not is_tw_detail and latest_raw > 10000000000:
                                 latest_raw = latest_raw / 32.0
-                                capex_str = f"{latest_raw / 100000000:.1f} 億美元 (API 歷史季報-幣別校正值)"
+                                capex_str = f"{latest_raw / 100000000:.1f} 億美元 (API 歷史財報校正值)"
                             elif is_tw_detail:
-                                capex_str = f"{latest_raw / 100000000:.1f} 億新台幣 (API 歷史已發生值)"
+                                capex_str = f"{latest_raw / 100000000:.1f} 億新台幣 (API 歷史財報值)"
                             else:
-                                capex_str = f"{latest_raw / 100000000:.1f} 億美元 (API 歷史已發生值)"
+                                capex_str = f"{latest_raw / 100000000:.1f} 億美元 (API 歷史財報值)"
                 except Exception:
                     pass
             
@@ -357,7 +358,7 @@ if selected_stock:
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="AI 即時網絡檢索，若搜尋引擎阻擋則自動向財報庫調用歷史財報並啟動幣別安全校正。")
+            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="優先採集 AI 即時網絡檢索，未果則自動向 Yahoo Finance API 歷史財報資料庫調用並啟動幣別安全洗鍊。")
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
                 
     except Exception as e: 
