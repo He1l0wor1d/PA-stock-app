@@ -54,8 +54,6 @@ with macro_col3:
 with st.expander("✨ 系統實戰使用指南 📖 ", expanded=False):
     st.markdown("""
     歡迎使用**🦅 極簡五等燈號自動化決策系統**！本系統將複雜指標降維，請參考以下核心邏輯進行操作：
-
-    ### (A) 核心指標說明
     1. **⚖️ 公允價值**：套用各種股票估值模型，作為判斷股票價值的參考。
     2. **🟢 買點 (支撐位)**：`20MA - 1.4*ATR`。
     3. **🔴 賣點 (壓力位)**：`20MA + 1.4*ATR`。
@@ -108,7 +106,7 @@ INITIAL_SECTOR_MAP = {
     "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", "2382.TW": "AI巨頭與軟體", "CBRS": "AI巨頭與軟體",
     "ARKX": "航太太空國防", "NASA": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
     "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", "ONDS": "航太太空國防",
-    "XOM": "傳統能源礦產", "OXY": "傳統能源礦产", "EQT": "傳統能源礦產",
+    "XOM": "傳統能源礦產", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
     "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技",
     "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
     "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理",
@@ -255,7 +253,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (高可靠：網頁實時快訊抓取 + AI 閱讀理解架構)
+# 🔍 個股動態決策軌道與核心基本面 (高穩定：Python網頁抓取 + AI 閱讀提煉架構)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 
@@ -270,33 +268,33 @@ selected_stock = st.selectbox(
 
 def get_live_guidance_via_ai(stock_code):
     try:
-        # 1. 在 Python 內直接透過 DuckDuckGo HTML 網頁進行實時抓取 (避開不穩定的 API 工具插頭)
+        # 🛡️ 行動 A：由 Python 在前端自主進行網撈，完全避開不穩定的 API 工具插頭
         search_query = f"{stock_code} 2026 全年 資本支出 營收 指引 法說會" if stock_code in ["TSM", "2330.TW"] else f"{stock_code} 2026 capex revenue growth guidance"
         url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(search_query)}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
         
         response = requests.get(url, headers=headers, timeout=6)
         scraped_context = ""
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
             snippets = [snippet.get_text() for snippet in soup.find_all("a", class_="result__snippet")]
-            scraped_context = " ".join(snippets[:5])
+            scraped_context = " ".join(snippets[:6])
         
-        # 2. 初始化 Gemini 模型 (回歸最穩定的純大腦模式，不使用 tools 以防被免費方案限制阻斷)
+        if not scraped_context or len(scraped_context) < 30:
+            return None, None
+            
+        # 🛡️ 行動 B：回歸最純粹、不開啟擴充套件的純 AI 大腦模式，安全讀取文字
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         model = genai.GenerativeModel(model_name='gemini-1.5-flash')
         
-        # 3. 將剛剛抓到的熱騰騰快訊文本，直接作為背景知識餵給 AI 進行精準剪輯
         prompt = f"""
-        你是專業的財經數據分析機器人。請閱讀下方從網路實時抓取的快訊文本，提取股票代碼 {stock_code} 2026 全年度最新法說會公布的：
-        1. 2026 全年資本支出指引 (CapEx Guidance)
-        2. 2026 全年營收年增率預期 (YoY Revenue Growth)
+        請仔細閱讀下方從財經網站實時抓取的法說會快訊文本，幫我提取並精簡整理出股票代碼 {stock_code} 官方針對「2026全年度」所公布的預期。
         
         【實時抓取文本】：{scraped_context}
         
-        請嚴格分兩行回答我，格式如下，不要包含任何 Markdown 標籤、星號、引號或多餘解釋：
-        資本支出：[提取的數據與貨幣單位]
-        營收成長：[提取的數據與單位]
+        請嚴格按照以下兩行的格式直接回答，不要包含任何 Markdown 標籤、星號、括號、或者多餘的財務解釋：
+        資本支出：[在此處填寫提取到的2026指引數據與單位]
+        營收成長：[在此處填寫提取到的2026預期年增率]
         """
         
         ai_response = model.generate_content(prompt)
@@ -329,21 +327,23 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
-            with st.spinner("🚀 混合引擎正在網撈最新法說快訊並交付 AI 提煉..."):
+            with st.spinner("🚀 混合引擎正經由高匿通道網撈實時法說快訊並交付 AI 提煉..."):
                 ai_capex, ai_growth = get_live_guidance_via_ai(selected_stock)
             
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
             curr_str = "NT$" if is_tw_detail else "美元"
             
+            # 1. 營收年增率預期展示邏輯
             if ai_growth and not any(x in ai_growth for x in ["無", "未", "數據", "錯誤", "None"]):
-                rev_growth_str = f"📡 最新指引: {ai_growth}"
+                rev_growth_str = f"📡 聯網實時提煉: {ai_growth}"
             else:
                 rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
-                rev_growth_str = f"{rev_growth * 100:.1f}% (API 歷史財報)" if rev_growth is not None else "暫無數據"
+                rev_growth_str = f"{rev_growth * 100:.1f}% (API 歷史季報折算)" if rev_growth is not None else "暫無數據"
             
+            # 2. 資本支出展示與安全洗鍊邏輯
             if ai_capex and not any(x in ai_capex for x in ["無", "未", "數據", "錯誤", "None"]):
-                capex_str = f"📡 最新指引: {ai_capex}"
+                capex_str = f"📡 聯網實時提煉: {ai_capex}"
             else:
                 capex_str = "暫無數據"
                 try:
@@ -368,7 +368,7 @@ if selected_stock:
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="優先採集網頁即時快訊交付 AI 提煉，未果則自動向 API 歷史資料庫調用並啟動匯率清洗。")
+            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="系統採用雙軌採集：優先由 Python 自主網撈當季快訊交由 AI 大腦精準提取口頭 Forward Guidance，若遭阻擋則無縫切換至財報庫進行清洗校正。")
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
                 
     except Exception as e: 
