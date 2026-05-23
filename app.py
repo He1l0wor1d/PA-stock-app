@@ -295,8 +295,7 @@ def get_live_guidance_via_ai(stock_code):
         
         capex_val = capex_match.group(1).strip() if capex_match else None
         growth_val = growth_match.group(1).strip() if growth_match else None
-        
-        return f"暫無數據", "暫無數據"
+
 
 if selected_stock:
     try:
