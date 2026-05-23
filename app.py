@@ -132,7 +132,11 @@ st.sidebar.header("📊 對稱網格參數設定")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 2.5, 1.4, 0.1)
 
-start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+# 大看板與看板邏輯維持常規一年數據，保持載入流暢
+start_date_看板 = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+# 🔍 核心需求：將 K 線圖與回測深度直接拉長至 3 年 (近 1095 天)
+start_date_3years = (datetime.now() - timedelta(days=1095)).strftime('%Y-%m-%d')
+
 summary_data = []
 action_alerts = []
 action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
@@ -147,8 +151,8 @@ with st.spinner("正在提煉核心決策..."):
             currency_symbol = "NT$ " if is_tw else "$ "
             
             stock = yf.Ticker(ticker)
-            df = stock.history(start=start_date)
-            if df.empty or len(df) < 220: continue
+            df = stock.history(start=start_date_看板)
+            if df.empty or len(df) < 200: continue
             
             info = stock.info if stock.info else {}
             target_low = info.get('targetLowPrice')
@@ -250,9 +254,9 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (地毯式前瞻搜索定量引擎 + 歷史實時圖表標記)
+# 🔍 個股動態決策軌道與核心基本面 (3年期大深度 K 線 + 純粹 🔥強買 驗證面板)
 # ==============================================================================
-st.header("🔍 個股動態決策軌道與核心基本面")
+st.header("🔍 個股動態決策軌道與核心基本面 (近3年大深度極簡驗證版)")
 
 sorted_tickers = sorted(active_tickers)
 default_index = sorted_tickers.index("TSM") if "TSM" in sorted_tickers else 0
@@ -266,23 +270,23 @@ selected_stock = st.selectbox(
 if selected_stock:
     try:
         stock_detail = yf.Ticker(selected_stock)
-        df_detail = stock_detail.history(start=start_date)
+        # 🚀 這裡向 yfinance 要求 3 年長度的歷史資料
+        df_detail = stock_detail.history(start=start_date_3years)
         
         if not df_detail.empty and len(df_detail) > 200:
             df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
             df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
             
-            # 計算歷史滾動的 ATR 網格線，用於在歷史 K 線圖上標註「當時」的訊號點
             high_low_det = df_detail['High'] - df_detail['Low']
             tr_det = pd.concat([high_low_det, (df_detail['High'] - df_detail['Close'].shift(1)).abs(), (df_detail['Low'] - df_detail['Close'].shift(1)).abs()], axis=1).max(axis=1)
             df_detail['ATR_det'] = tr_det.rolling(window=atr_period).mean()
             
             fig = go.Figure()
             fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2.5)))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=3)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=2.5)))
             
-            # 🚀 實時回溯歷史價格，找出所有「符合策略臨界點」的歷史日期，直接標記在圖表上！
+            # 🚀 歷史回溯 3 年內所有符合策略臨界點的日期，過濾雜訊，【只標註 🔥強買】
             annotations = []
             for date, row in df_detail.dropna(subset=['MA20_plot', 'MA200', 'ATR_det']).iterrows():
                 p_close = row['Close']
@@ -291,81 +295,53 @@ if selected_stock:
                 p_atr = row['ATR_det']
                 
                 low_bound = p_ma20 - (p_atr * atr_multiplier)
-                high_bound = p_ma20 + (p_atr * atr_multiplier)
                 
-                # 判定歷史這一天的訊號狀態并標記
-                if p_ma20 >= p_ma200: # 多頭波段
-                    if p_close <= low_bound: # 🔥 強力買入
+                # 判定歷史這一天的訊號狀態
+                if p_ma20 >= p_ma200: # 多頭波段拉回超賣
+                    if p_close <= low_bound: # 🔥 強力買入 (Buy the Dip)
                         annotations.append(dict(
                             x=date, y=row['Low'], text="🔥強買", showarrow=True,
                             arrowhead=2, arrowcolor="green", arrowsize=1, arrowwidth=2,
-                            ax=0, ay=35, font=dict(color="white", size=10), bgcolor="green"
+                            ax=0, ay=35, font=dict(color="white", size=9), bgcolor="green"
                         ))
-                    elif p_close >= high_bound: # 🔴 賣出
+                else: # 空頭結構超跌
+                    if p_close <= low_bound: # 空頭超賣（小倉位試探性 Buy the Dip）
                         annotations.append(dict(
-                            x=date, y=row['High'], text="🔴高拋", showarrow=True,
-                            arrowhead=2, arrowcolor="purple", arrowsize=1, arrowwidth=2,
-                            ax=0, ay=-35, font=dict(color="white", size=10), bgcolor="purple"
+                            x=date, y=row['Low'], text="🔥底超", showarrow=True,
+                            arrowhead=2, arrowcolor="#1f77b4", arrowsize=1, arrowwidth=2,
+                            ax=0, ay=35, font=dict(color="white", size=9), bgcolor="#1f77b4"
                         ))
-                else: # 空頭結構
-                    idx_loc = df_detail.index.get_loc(date)
-                    if idx_loc > 0:
-                        p_yesterday_close = df_detail['Close'].iloc[idx_loc-1]
-                        if p_yesterday_close >= p_ma20 and p_close < p_ma20: # 🚨 強力賣出
-                            annotations.append(dict(
-                                x=date, y=row['High'], text="🚨強賣", showarrow=True,
-                                arrowhead=2, arrowcolor="red", arrowsize=1, arrowwidth=2,
-                                ax=0, ay=-35, font=dict(color="white", size=10), bgcolor="red"
-                            ))
 
             fig.update_layout(
-                xaxis_rangeslider_visible=False, yaxis_title="價格", height=450, 
+                xaxis_rangeslider_visible=False, yaxis_title="價格", height=500, 
                 template="plotly_white", annotations=annotations
             )
             st.plotly_chart(fig, use_container_width=True)
+            st.info("💡 驗證指南：綠色【🔥強買】代表大趨勢多頭下的拉回抄底點；藍色【🔥底超】代表長期空頭結構下的超賣反彈點。你可以放大圖表，確認每一次標記是否都成功鎖定在波段的相對低點（Buy the Dip）。")
             
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
             
-            # 1. 營收增長預期提取（優先調用分析師 Forward 預估共識）
+            # 基本面定量面板
             rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth') or info.get('earningsQuarterlyGrowth')
-            if rev_growth is not None:
-                rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街分析師複合共識預期)"
-            else:
-                rev_growth_str = "未揭露未來展望"
+            rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街分析師複合共識預期)" if rev_growth is not None else "未揭露未來展望"
             
-            # 2. ⚡ 資本支出 (CapEx) 地毯式指引提取與安全降級校正算法
             capex_str = "未揭露未來指引"
-            
-            # 第一軌：地毯式搜索 yfinance 財務庫中所有代表官方未來公布的指引欄位
-            guidance_keys = [k for k in info.keys() if any(x in k.lower() for x in ['guidance', 'capex_estimate', 'forward_capex'])]
-            found_forward = False
-            if guidance_keys:
-                forward_val = info.get(guidance_keys[0])
-                if forward_val and str(forward_val).replace('.','').isdigit():
-                    forward_val = float(forward_val)
-                    if not is_tw_detail and forward_val > 10000000000: forward_val /= 32.0
-                    capex_str = f"{forward_val / 100000000:.1f} 億美元 (官方發布前瞻指引)" if not is_tw_detail else f"{forward_val / 100000000:.1f} 億新台幣 (官方發布前瞻指引)"
-                    found_forward = True
-            
-            # 第二軌備援：若前瞻欄位落空（尚未公佈），切換至當季財報年化折算，並洗鍊校正 ADR 錯置的幣別
-            if not found_forward:
-                try:
-                    cf = stock_detail.quarterly_cashflow
-                    if cf is None or cf.empty: cf = stock_detail.cashflow
-                    if cf is not None and not cf.empty:
-                        m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                        if m_keys:
-                            latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
-                            if not is_tw_detail and latest_raw > 10000000000:
-                                latest_raw = latest_raw / 32.0
-                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (未發布指引-改採季報年化折算)"
-                            elif is_tw_detail:
-                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (未發布指引-改採季報年化折算)"
-                            else:
-                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (未發布指引-改採季報年化折算)"
-                except Exception:
-                    pass
+            try:
+                cf = stock_detail.quarterly_cashflow
+                if cf is None or cf.empty: cf = stock_detail.cashflow
+                if cf is not None and not cf.empty:
+                    m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                    if m_keys:
+                        latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
+                        if not is_tw_detail and latest_raw > 10000000000:
+                            latest_raw = latest_raw / 32.0
+                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
+                        elif is_tw_detail:
+                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (單季最新數據年化折算)"
+                        else:
+                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
+            except Exception: pass
             
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
@@ -379,15 +355,16 @@ if selected_stock:
         st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
-# ⏳ 策略回測績效驗證
+# ⏳ 策略回測績效驗證 (同步拉長回測深度)
 # ==============================================================================
 st.markdown("---")
-st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
+st.header("⏳ 策略回測績效驗證 (大數據多空循環驗證)")
 st.markdown("從您指定的日期開始往後掃描，找出每一檔股票**「第一次」觸發 🔥買入 的日子與價位**，並對比今日收盤價，驗證策略真實報酬率！")
 
 backtest_col, _ = st.columns([1, 3])
 with backtest_col:
-    default_date = datetime.now().date() - timedelta(days=60) 
+    # 預設回測起始時間拉長到 180 天前，更具統計意義
+    default_date = datetime.now().date() - timedelta(days=180) 
     backtest_date = st.date_input("📅 選擇掃描起始日期：", value=default_date)
 
 bt_date_str = backtest_date.strftime('%Y-%m-%d')
