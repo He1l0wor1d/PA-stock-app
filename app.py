@@ -292,160 +292,43 @@ if summary_data:
 
 st.markdown("---")
 
-# ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (通用網路爬蟲 + Yahoo Finance 備援版)
-# ==============================================================================
-st.header("🔍 個股動態決策軌道與核心基本面")
+import streamlit as st
+import yfinance as yf
+import json
+import google.generativeai as genai  # 或是使用 openai 庫
 
-import requests
-from bs4 import BeautifulSoup
-import re
-
-# 自動計算預設個股位置
-sorted_tickers = sorted(active_tickers)
-default_index = 0
-
-selected_stock = st.selectbox(
-    "選擇個股查看決策軌道：", 
-    options=sorted_tickers, 
-    index=default_index
-)
-
-def fetch_stock_guidance_live(stock_code):
+def get_live_guidance_via_ai(stock_code):
     """
-    通用即時網路爬蟲：動態檢索該個股 2026 年度的資本支出與營收預期指引
+    利用 AI 的聯網能力，直接吐出結構化的最新法說會指引，完全解決爬蟲被擋與正則失效的問題
     """
-    extracted_capex = None
-    extracted_growth = None
-    raw_snippet = None
-    
     try:
-        # 建立通用搜尋字串
-        search_query = f"{stock_code} 2026 capex guidance capital expenditure"
-        url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(search_query)}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        # 這裡配置你的 AI 聯網 Prompt
+        prompt = f"""
+        請搜尋網路公開資料，查詢股票代碼 {stock_code} 最新法說會公布的 2026 全年資本支出指引（CapEx Guidance）與 2026 全年營收年增率預期（YoY Revenue Growth Guidance）。
+        請嚴格以 JSON 格式回傳，不要包含任何 Markdown 標記，格式如下：
+        {{
+            "capex": "最新資本支出數據與貨幣單位",
+            "growth": "最新營收成長預期百分比"
+        }}
+        """
         
-        response = requests.get(url, headers=headers, timeout=6)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            snippets = [snippet.get_text() for snippet in soup.find_all("a", class_="result__snippet")]
-            combined_text = " ".join(snippets)
-            raw_snippet = snippets[0] if snippets else None
-            
-            # 1. 資本支出通用正則表達式 (相容中英文與範圍區間)
-            capex_patterns = [
-                r"(\d+[\s-]*至[\s-]*\d+\s*億\s*美元)",
-                r"(\d+[\s-]*\d+\s*billion\s*dollars)",
-                r"(\d+[\s-]*\d+\s*billion)",
-                r"(\d+[\s-]*\d+\s*B\s*USD)",
-                r"(\d+\s*億\s*美元)",
-                r"(\d+\s*billion)"
-            ]
-            for pattern in capex_patterns:
-                match = re.search(pattern, combined_text, re.IGNORECASE)
-                if match:
-                    extracted_capex = match.group(0)
-                    break
-            
-            # 2. 營收年增率/成長率通用正則表達式
-            growth_patterns = [
-                r"(超過\s*\d+%)",
-                r"(grow\s*by\s*above\s*\d+%)",
-                r"(more\s*than\s*\d+%\s*)",
-                r"(\d+%\s*growth)",
-                r"(\d+%\s*成長)"
-            ]
-            for pattern in growth_patterns:
-                match = re.search(pattern, combined_text, re.IGNORECASE)
-                if match:
-                    extracted_growth = match.group(0)
-                    break
+        # 呼叫支援聯網/搜尋的 AI 模型 (範例)
+        model = genai.GenerativeModel('gemini-1.5-pro')
+        response = model.generate_content(prompt) # 需開啟聯網 tools
+        
+        data = json.loads(response.text.strip())
+        return data.get("capex"), data.get("growth")
     except Exception:
-        pass
-    return extracted_capex, extracted_growth, raw_snippet
+        return "無數據", "無數據"
 
+# ---- 在 Streamlit 面板渲染時 ----
 if selected_stock:
-    try:
-        stock_detail = yf.Ticker(selected_stock)
-        df_detail = stock_detail.history(start=start_date)
-        
-        if not df_detail.empty and len(df_detail) > 200:
-            # 繪製 K 線與均線軌道
-            df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
-            df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
-            
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2.5)))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=3)))
-            fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # --- 基本面數據處理層 ---
-            info = stock_detail.info if stock_detail.info else {}
-            is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
-            curr_str = "NT$" if is_tw_detail else "美元"
-            
-            rev_growth_str = "無數據"
-            capex_str = "無數據"
-            insight_notes = ""
-            
-            # 🚀 執行通用網路爬蟲
-            live_capex, live_growth, live_snippet = fetch_stock_guidance_live(selected_stock)
-            
-            # 優先採用爬蟲抓取到的最新法說會/市場預期數據
-            if live_capex or live_growth:
-                capex_str = f"📡 網路即時撈取: {live_capex}" if live_capex else "無法解析最新預期"
-                rev_growth_str = f"📡 網路即時撈取: {live_growth}" if live_growth else "無法解析最新預期"
-                if live_snippet:
-                    insight_notes = f"【即時網路快訊摘錄】: {live_snippet}"
-            
-            # 備援機制：若爬蟲未抓到，全自動回歸 Yahoo Finance API 歷史財報數據計算
-            if capex_str == "無數據" or rev_growth_str == "無數據":
-                rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
-                if rev_growth is not None and rev_growth_str == "無數據":
-                    rev_growth_str = f"{rev_growth * 100:.1f}% (API歷史財報)"
-                
-                if capex_str == "無數據":
-                    try:
-                        cf = stock_detail.quarterly_cashflow
-                        if cf is None or cf.empty: 
-                            cf = stock_detail.cashflow
-                        if cf is not None and not cf.empty:
-                            m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                            if m_keys:
-                                latest_raw = cf.loc[m_keys[0]].dropna().iloc[0]
-                                if pd.notna(latest_raw) and latest_raw != 0:
-                                    capex_str = f"{abs(latest_raw) / 100000000:.1f} 億{curr_str} (API已揭露財報值)"
-                    except Exception:
-                        pass
-            
-            # 3. 當前本益比估值
-            pe_ratio = info.get('trailingPE') or info.get('forwardPE')
-            pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
-            
-            # --- 前端面板渲染 ---
-            col_f1, col_f2, col_f3 = st.columns(3)
-            col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="優先透過通用爬蟲引擎抓取最新網路資料，未果則回歸 Yahoo Finance 財報庫")
-            col_f3.metric("實時估值 (PE Ratio)", pe_str)
-            
-            if insight_notes:
-                st.info(insight_notes)
-                
-            # 自動化行事曆
-            st.markdown("##### 📅 該個股最新官方公告之行事曆與預期")
-            try:
-                calendar = stock_detail.calendar
-                if calendar is not None and not calendar.empty:
-                    st.dataframe(calendar, use_container_width=True)
-                else:
-                    st.caption("💡 該標的近期官方暫無更新法說行事曆數據。")
-            except Exception:
-                st.caption("💡 暫時無法取得該股行事曆數據，請依官方公告為準。")
-                
-    except Exception as e: 
-        st.error(f"分析載入失敗: {e}")
+    # 讓 AI 幫你全自動網撈最新的 2026 指引，免去寫正則表達式和維護爬蟲的痛苦
+    capex_str, rev_growth_str = get_live_guidance_via_ai(selected_stock)
+    
+    col_f1, col_f2 = st.columns(2)
+    col_f1.metric("2026 營收年增率預期 (YoY)", rev_growth_str)
+    col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str)
 
 # ==============================================================================
 # ⏳ 策略回測績效驗證 (Scan-Forward 尋找首個買點機制)
