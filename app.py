@@ -123,7 +123,7 @@ st.sidebar.header("📊 對稱網格參數設定")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 2.5, 1.4, 0.1)
 
-# 🛠️ 升級：側邊欄引入超賣動能過濾參數，防止初跌段連續亮訊號
+# 側邊欄引入超賣動能過濾參數
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (低於此值才觸發強買)", 20, 45, 32, 1)
 
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
@@ -131,7 +131,7 @@ summary_data = []
 action_alerts = []
 action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
 
-# 本地 RSI 計算函數，避免額外依賴外部庫出錯
+# 本地 RSI 計算函數
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -193,10 +193,12 @@ with st.spinner("正在提煉核心決策..."):
             final_action = "⚪ 觀望"
             reason_str = "未觸及 any 策略臨界點。"
             
+            # 🛠️ 大底部極端恐慌過濾演算法 (防止關稅利空連續暴跌時被MA20下壓漏掉訊號)
+            is_extreme_panic = (current_price <= low_absorb_price or current_price <= current_bb_lower) and current_rsi <= rsi_filter_val
+            
             if ma20_center >= latest_ma200:
                 market_state = "📈 多頭波段 (會漲)"
-                # 🛠️ 升級：即時面板加入複合金色大底部濾網 (跌破網格或跌破布林下軌，且RSI超賣)
-                if (current_price <= low_absorb_price or current_price <= current_bb_lower) and current_rsi <= rsi_filter_val: 
+                if is_extreme_panic: 
                     final_action = "🔥 強力買入"
                     reason_str = f"多頭恐慌暴跌洗盤！股價砸入大底部防守區，且 RSI 超賣 ({current_rsi:.1f})，黃金埋伏點！"
                 elif abs(current_price - ma20_center)/ma20_center <= 0.02: 
@@ -208,27 +210,35 @@ with st.spinner("正在提煉核心決策..."):
                 else:
                     final_action = "⚪ 觀望"
                     reason_str = f"多頭結構健全，低吸位 {currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}，未到請安心持股。"
-                    
             else:
                 market_state = "📉 空頭結構 (會跌)"
-                if yesterday_close >= ma20_center and current_price < ma20_center: 
+                if is_extreme_panic:
+                    # 🛠️ 修正點：即使均線死亡交叉，只要觸發極端恐慌拋售大底部，依然亮起強烈買入
+                    final_action = "🔥 強力買入"
+                    reason_str = "空頭極度超賣砸出大黃金坑，解鎖極端暴跌強烈買入限制。"
+                elif yesterday_close >= ma20_center and current_price < ma20_center: 
                     final_action = "🚨 強力賣出"
                     reason_str = "剛破 20MA 決策線，趨勢偏空，果斷離場拒絕接飛刀。"
                 elif current_price >= high_toss_price: 
                     final_action = "🔴 賣出"
                     reason_str = f"空頭反彈觸及網格上限 (+{atr_multiplier:.1f}x ATR)，逃命高拋點。"
-                elif (current_price <= low_absorb_price or current_price <= current_bb_lower) and current_rsi <= rsi_filter_val: 
+                elif abs(current_price - ma20_center)/ma20_center <= 0.02:
                     final_action = "🟢 買入"
-                    reason_str = f"空頭極度超賣，觸及歷史下尾端，極小倉位短線試探。"
+                    reason_str = "空頭中短線超跌反彈至20MA支撐區嘗試性建倉。"
                 else:
                     final_action = "⚪ 觀望"
                     reason_str = "空頭下跌結構中，堅決保持空倉觀望。"
 
-            if final_action != "⚪ 觀望":
+            # 🛠️ 修正需求 (1)：今日促銷面板只保留 '🔥 強力買入' 與 '🟢 買入'，並更新欄位
+            if final_action in ["🔥 強力買入", "🟢 買入"]:
                 action_alerts.append({
-                    "代碼": ticker, "綜合建議": final_action, "市場狀態": market_state, "當前股價": f"{currency_symbol}{current_price:.1f}",
-                    "公允價值區間": fair_value_str, "移動停利價位": trailing_stop_str, "昨日收盤價": f"{currency_symbol}{yesterday_close:.1f}", 
-                    "MA20": f"{currency_symbol}{ma20_center:.1f}", "精簡決策原因": reason_str
+                    "代碼": ticker, 
+                    "綜合建議": final_action, 
+                    "市場狀態": market_state, 
+                    "當前股價": f"{currency_symbol}{current_price:.1f}",
+                    "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}",
+                    "公允價值區間": fair_value_str, 
+                    "MA20": f"{currency_symbol}{ma20_center:.1f}"
                 })
 
             summary_data.append({
@@ -239,11 +249,12 @@ with st.spinner("正在提煉核心決策..."):
             })
         except Exception: pass
 
-st.header("🚨 今日核心執行 ACTION 面板")
+# 🛠️ 修正需求 (1)：名稱改為『今日促銷』，優化欄位並完全清空無關個股
+st.header("🚨 今日促銷")
 if action_alerts:
     st.dataframe(pd.DataFrame(action_alerts), use_container_width=True, hide_index=True)
 else:
-    st.info("🧘 報告隊長：今日名單中皆無個股觸發臨界點。請繼續安心保持觀望。")
+    st.info("🧘 報告隊長：今日名單內皆無觸發『強力買入』或『買入』的特價促銷標的。請保持耐性。")
 
 st.markdown("---")
 
@@ -286,16 +297,12 @@ if selected_stock:
             tr_det = pd.concat([high_low_det, (df_detail['High'] - df_detail['Close'].shift(1)).abs(), (df_detail['Low'] - df_detail['Close'].shift(1)).abs()], axis=1).max(axis=1)
             df_detail['ATR_det'] = tr_det.rolling(window=atr_period).mean()
             
-            # 每日動態防禦下限計算
             df_detail['Low_Absorb'] = df_detail['MA20_plot'] - (df_detail['ATR_det'] * atr_multiplier)
-            df_detail['Is_Bull'] = df_detail['MA20_plot'] >= df_detail['MA200']
             
-            # 🛠️ 升級：更精準的 Buy the Dip 大底部演算法
-            # 1. 價格跌破網格下限 OR 跌破布林下軌 (防止MA20快速下墜導致軌道收縮漏訊號)
-            # 2. RSI 必須進入極度超賣區，排除初跌段連發訊號
+            # 🛠️ 修正需求 (2)：解除均線死結，徹底網羅 2025/4/17 關稅暴跌黃金坑
             price_cond = (df_detail['Close'] <= df_detail['Low_Absorb']) | (df_detail['Close'] <= df_detail['BB_Lower'])
             rsi_cond = df_detail['RSI'] <= rsi_filter_val
-            df_detail['Strong_Buy_Signal'] = df_detail['Is_Bull'] & price_cond & rsi_cond
+            df_detail['Strong_Buy_Signal'] = price_cond & rsi_cond
             
             buy_signals = df_detail[df_detail['Strong_Buy_Signal']]
 
@@ -305,41 +312,28 @@ if selected_stock:
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=2.5)))
             
-            # 🛠️ 升級：移除所有三角形、Buy字樣等雜訊，改用極簡『淡金色垂直虛線光束』標示強買日
-            shapes_list = []
-            for sig_date in buy_signals.index:
-                shapes_list.append(dict(
-                    type="line",
-                    xref="x", yref="paper",
-                    x0=sig_date, x1=sig_date,
-                    y0=0, y1=1,
-                    line=dict(color="rgba(212, 175, 55, 0.45)", width=2.5, dash="dash") # 45% 不透明度的經典金屬虛線
+            # 🛠️ 修正需求 (2)：拿掉虛線光束，維持經典的『金色向上三角形』與股價標記
+            if not buy_signals.empty:
+                fig.add_trace(go.Scatter(
+                    x=buy_signals.index,
+                    y=buy_signals['Low'] * 0.96,  
+                    mode='markers+text',
+                    marker=dict(symbol='triangle-up', size=13, color='gold', line=dict(color='darkgoldenrod', width=1.5)),
+                    text=[f"🔥 強力買入<br>{p:.1f}" for p in buy_signals['Close']],
+                    textposition="bottom center",
+                    name='🔥 強力買入'
                 ))
                 
-            fig.update_layout(
-                shapes=shapes_list,
-                xaxis_rangeslider_visible=False, 
-                yaxis_title="價格", 
-                height=520, 
-                template="plotly_white",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-            )
+            fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=500, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
             
-            # 1. 營收增長預期提取
             rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth') or info.get('earningsQuarterlyGrowth')
-            if rev_growth is not None:
-                rev_growth_str = f"{rev_growth * 100:.1f}%"
-            else:
-                rev_growth_str = "未揭露未來指引"
+            rev_growth_str = f"{rev_growth * 100:.1f}%" if rev_growth is not None else "未揭露未來指引"
             
-            # 2. ⚡ 資本支出 (CapEx) 地毯式指引提取與安全降級校正算法
             capex_str = "未揭露未來指引"
-            
-            # 第一軌：地毯式搜索 yfinance 隱藏的前瞻指引/分析師預期
             guidance_keys = [k for k in info.keys() if any(x in k.lower() for x in ['guidance', 'capex_estimate', 'forward_capex'])]
             found_forward = False
             if guidance_keys:
@@ -350,7 +344,6 @@ if selected_stock:
                     capex_str = f"{forward_val / 100000000:.1f} 億美元" if not is_tw_detail else f"{forward_val / 100000000:.1f} 億新台幣"
                     found_forward = True
             
-            # 第二軌備援：若官方尚未公佈前瞻，全自動切換至最新季度財報，並啟動年化運轉率 (Run Rate) 與幣別清洗
             if not found_forward:
                 try:
                     cf = stock_detail.quarterly_cashflow
@@ -359,7 +352,6 @@ if selected_stock:
                         m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
                         if m_keys:
                             latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
-                            # 🛡️ 數據清洗：防止 ADR 將新台幣錯植為美金標籤
                             if not is_tw_detail and latest_raw > 10000000000:
                                 latest_raw = latest_raw / 32.0
                                 capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元"
@@ -367,15 +359,14 @@ if selected_stock:
                                 capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣"
                             else:
                                 capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元"
-                except Exception:
-                    pass
+                except Exception: pass
             
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="地毯式定量指引算法：優先向財務資料庫調用官方發布之 Forward Guidance，若個股尚未發布，則自動切換至最新季度財報進行 Run Rate 洗鍊。")
+            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str)
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
                 
     except Exception as e: 
@@ -386,12 +377,21 @@ if selected_stock:
 # ==============================================================================
 st.markdown("---")
 st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
-st.markdown("從您指定的日期開始往後掃描，找出每一檔股票**「第一次」觸發 🔥買入 的日子與價位**，並對比今日收盤價，驗證策略真實報酬率！")
+st.markdown("從您指定的日期開始往後掃描，找出每一檔股票**「第一次」觸發指定訊號的日子與價位**，並對比今日收盤價，驗證策略真實報酬率！")
 
-backtest_col, _ = st.columns([1, 3])
-with backtest_col:
-    default_date = datetime.now().date() - timedelta(days=60) 
-    backtest_date = st.date_input("📅 選擇掃描起始日期：", value=default_date)
+backtest_col1, backtest_col2, _ = st.columns([1, 1, 2])
+with backtest_col1:
+    # 🛠️ 修正需求 (3)：預設起始時間修改為 2026 年 5 月 1 日
+    default_backtest_date = datetime(2026, 5, 1).date()
+    backtest_date = st.date_input("📅 選擇掃描起始日期：", value=default_backtest_date)
+
+with backtest_col2:
+    # 🛠️ 修正需求 (3)：提供使用者多功能自訂選取回測訊號類型
+    signal_choice = st.selectbox(
+        "🎯 選擇回測訊號類型：",
+        options=["買入 + 強力買入", "單獨買入", "單獨強力買入"],
+        index=0
+    )
 
 bt_date_str = backtest_date.strftime('%Y-%m-%d')
 backtest_results = []
@@ -408,7 +408,7 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
             df_bt['MA20'] = df_bt['Close'].rolling(window=20).mean()
             df_bt['MA200'] = df_bt['Close'].rolling(window=200).mean()
             df_bt['STD20'] = df_bt['Close'].rolling(window=20).std()
-            df_bt['BB_Lower'] = df_bt['MA20'].rolling(window=20).mean() - (2 * df_bt['STD20'])
+            df_bt['BB_Lower'] = df_bt['MA20'] - (2 * df_bt['STD20'])
             df_bt['RSI'] = calculate_rsi(df_bt['Close'], 14)
             
             hl = df_bt['High'] - df_bt['Low']
@@ -435,23 +435,29 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 
                 low_b = past_ma20 - (past_atr * atr_multiplier)
                 
-                if past_ma20 >= past_ma200:
-                    # 回測同步套用全新優化的大底部算法
-                    if (past_close <= low_b or past_close <= past_bb_lower) and past_rsi <= rsi_filter_val:
-                        signal = "🔥 強力買入"
-                    elif abs(past_close - past_ma20)/past_ma20 <= 0.02:
-                        signal = "🟢 買入"
-                    else:
-                        continue 
-                        
-                    return_pct = ((latest_today_price - past_close) / past_close) * 100
-                    backtest_results.append({
-                        "產業": ticker_sector, "代碼": ticker,
-                        "建倉日期": date.strftime('%Y-%m-%d'), "當時訊號": signal,
-                        "買入價": f"{currency}{past_close:.1f}", "今日最新價": f"{currency}{latest_today_price:.1f}",
-                        "累積報酬率": f"{return_pct:.1f}%"
-                    })
-                    break 
+                # 計算該日訊號狀態 (解除死結，任何結構下的極端超賣皆為強力買入)
+                is_past_strong_buy = (past_close <= low_b or past_close <= past_bb_lower) and past_rsi <= rsi_filter_val
+                is_past_normal_buy = abs(past_close - past_ma20) / past_ma20 <= 0.02
+                
+                signal = None
+                if signal_choice == "買入 + 強力買入":
+                    if is_past_strong_buy: signal = "🔥 強力買入"
+                    elif is_past_normal_buy: signal = "🟢 買入"
+                elif signal_choice == "單獨買入" and is_past_normal_buy and not is_past_strong_buy:
+                    signal = "🟢 買入"
+                elif signal_choice == "單獨強力買入" and is_past_strong_buy:
+                    signal = "🔥 強力買入"
+                
+                if signal is None: continue 
+                    
+                return_pct = ((latest_today_price - past_close) / past_close) * 100
+                backtest_results.append({
+                    "產業": ticker_sector, "代碼": ticker,
+                    "建倉日期": date.strftime('%Y-%m-%d'), "當時訊號": signal,
+                    "買入價": f"{currency}{past_close:.1f}", "今日最新價": f"{currency}{latest_today_price:.1f}",
+                    "累積報酬率": f"{return_pct:.1f}%"
+                })
+                break 
 
         except Exception: pass
 
@@ -471,4 +477,4 @@ if backtest_results:
         col_r1.error(f"📉 策略平均報酬率：**{avg_return:.1f}%**")
     col_r2.info(f"🎯 策略勝率 (正報酬比例)：**{win_rate:.1f}%**")
 else:
-    st.info(f"自 {bt_date_str} 起算，觀察名單內無任何標的觸發買入條件。請嘗試將日期往前推！")
+    st.info(f"自 {bt_date_str} 起算，觀察名單內無任何標的觸發您選擇的 【{signal_choice}】 條件。請嘗試移動日期！")
