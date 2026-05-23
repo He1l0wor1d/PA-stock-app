@@ -296,14 +296,7 @@ def get_live_guidance_via_ai(stock_code):
         capex_val = capex_match.group(1).strip() if capex_match else None
         growth_val = growth_match.group(1).strip() if growth_match else None
         
-        # 針對 TSM / 2330.TW 建立最底層的 AI 斷網自適應保護殼
-        if stock_code in ["TSM", "2330.TW"]:
-            if not capex_val or "儲存" in capex_val or "錯誤" in capex_val:
-                capex_val = "520億 ~ 560億美元 (趨近高標)"
-            if not growth_val or "數據" in growth_val:
-                growth_val = "大於 30% (全年美元營收指引上修)"
-                
-        return capex_val or "未揭露指引", growth_val or "未揭露指引"
+       
         
     except Exception as e:
         # 防禦降級：若徹底斷網或金鑰過載，針對台積電給予最新法說共識值，其餘則呈現簡短錯誤
