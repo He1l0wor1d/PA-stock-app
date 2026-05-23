@@ -123,12 +123,9 @@ all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
 
 st.sidebar.header("📊 對稱網格參數設定")
-# 🛠️ 修正需求 (4)：ATR 計算天數固定為 14 天，移除滑桿
 atr_period = 14
 st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天（精簡標註優化）")
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, 1.4, 0.1)
-
-# 🛠️ 修正需求 (3)：RSI 預設為 32（賣壓），並清楚標註 25 為恐慌賣壓
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (預設32常態賣壓 / 25極端恐慌賣壓)", 15, 45, 32, 1)
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
@@ -205,39 +202,33 @@ with st.spinner("正在提煉核心決策..."):
             
             market_state = "⚪ 觀望"
             final_action = "⚪ 觀望"
-            reason_str = "未觸及 any 策略臨界點。"
             
             spy_current_close = spy_df_global['Close'].iloc[-1]
             spy_current_ma200 = spy_df_global['MA200'].iloc[-1]
             is_market_safe = spy_current_close >= spy_current_ma200 if not pd.isna(spy_current_ma200) else True
             
-            # 短線技術超賣指標
             is_extreme_panic = (current_price <= low_absorb_price or current_price <= current_bb_lower) and current_rsi <= rsi_filter_val
             if use_market_filter and not is_market_safe:
                 is_extreme_panic = False 
             
-            # 🛠️ 修正需求 (2)：校正空頭推薦強買的矛盾邏輯
             if ma20_center >= latest_ma200:
                 market_state = "📈 多頭波段 (會漲)"
                 if is_extreme_panic: 
                     final_action = "🔥 強力買入"
-                    reason_str = "多頭回檔極度深邃，觸及戰略買點。"
                 elif abs(current_price - ma20_center)/ma20_center <= 0.02: 
                     final_action = "🟢 買入"
-                    reason_str = "多頭回試 20MA 關鍵支撐。"
                 elif current_price >= high_toss_price: 
                     final_action = "🔴 賣出"
                 else:
                     final_action = "⚪ 觀望"
             else:
                 market_state = "📉 空頭結構 (會跌)"
-                # 🛡️ 鐵律鎖定：既然是會跌的空頭結構，堅決不允許「強力買入」，防止左側無底深淵接飛刀
                 if yesterday_close >= ma20_center and current_price < ma20_center: 
                     final_action = "🚨 強力賣出"
                 elif current_price >= high_toss_price: 
                     final_action = "🔴 賣出"
                 elif abs(current_price - ma20_center)/ma20_center <= 0.02:
-                    final_action = "🟢 買入" # 空頭反彈至均線支撐的極小倉試探
+                    final_action = "🟢 買入" 
                 else:
                     final_action = "⚪ 觀望"
 
@@ -268,15 +259,16 @@ else:
 
 st.markdown("---")
 
-# 🛠️ 修正需求 (5)：將大看板升級為『表頭內建動態多維篩選與排序』，徹底免除下拉選單的低效困境
-st.header("📊 降維極簡大看板 (點擊表頭漏斗 ⏳ 可即時打字篩選與交叉排序)")
+# 🛠️ 修正點：移除 filter="column" 的語法錯誤。在 Streamlit 中直接傳入 DataFrame，
+# 表頭就會原生具備點擊排序功能。如需多維交互，滑鼠移至表頭上即可啟用搜尋。
+st.header("📊 降維極簡大看板 (點擊表頭欄位名稱可直接進行實時排序)")
 if summary_data:
     summary_df = pd.DataFrame(summary_data)
     summary_df['sort'] = summary_df['綜合建議'].map(action_rank)
     summary_df = summary_df.sort_values(by=["sort", "產業領域", "代碼"]).drop('sort', axis=1)
     
-    # 核心黑科技：啟用 column 級別互動濾網
-    st.dataframe(summary_df, use_container_width=True, hide_index=True, filter="column")
+    # 正確的高級互動式看板渲染
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
@@ -311,7 +303,6 @@ if selected_stock:
             df_detail['ATR_det'] = tr_det.rolling(window=atr_period).mean()
             df_detail['Low_Absorb'] = df_detail['MA20_plot'] - (df_detail['ATR_det'] * atr_multiplier)
             
-            # 火焰標記點同樣遵循修正邏輯：必須在多頭趨勢下（MA20 >= MA200）的恐慌暴跌，才是健康強買點
             price_cond = (df_detail['Close'] <= df_detail['Low_Absorb']) | (df_detail['Close'] <= df_detail['BB_Lower'])
             rsi_cond = df_detail['RSI'] <= rsi_filter_val
             trend_cond = df_detail['MA20_plot'] >= df_detail['MA200']
@@ -325,7 +316,7 @@ if selected_stock:
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=2.5)))
             
-            # 🛠️ 修正需求 (1)：全面拔除三角形，改用純粹的金色火焰圖案標註
+            # 🛠️ 修正點：圖上只有金色火焰（fire），無任何三角形
             if not buy_signals.empty:
                 fig.add_trace(go.Scatter(
                     x=buy_signals.index,
@@ -462,7 +453,6 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 else:
                     is_market_safe_past = True
                 
-                # 🛠️ 回測端同步嚴格執行：只有多頭趨勢才允許強力買入
                 is_past_strong_buy = (past_ma20 >= past_ma200) and (past_close <= low_b or past_close <= past_bb_lower) and past_rsi <= rsi_filter_val
                 if use_market_filter and not is_market_safe_past:
                     is_past_strong_buy = False 
