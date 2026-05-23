@@ -10,7 +10,7 @@ import re
 
 st.set_page_config(layout="wide", page_title="股票決策系統")
 st.title("🦅 美股+台股『極簡五等燈號』雙軌制決策系統")
-st.markdown("本系統已進化為**雙軌制引擎**：既具備左側抄底的**【🔥強買】**，亦新增了右側順勢追價強勢股的**【⚡動能突破】**。")
+st.markdown("本系統已進化為**雙軌制安全引擎**：具備左側抄底的**【🔥強買】**，與具備防追高安全閥的右側**【⚡動能突破】**。")
 
 # ==============================================================================
 # 🌐 第一層：全球總體經濟與市場情緒觀測站
@@ -29,7 +29,7 @@ with macro_col1:
         
     st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100")
     st.progress(fg_value / 100)
-    st.caption("💡 提示：大盤進入『極度貪婪』時，強勢動能股追價應注意分批控倉。")
+    st.caption("💡 提示：大盤進入『極度貪婪』時，右側動能追價應嚴格控制倉位。")
 
 with macro_col2:
     st.markdown("##### 📊 席勒本益比 (Shiller PE)")
@@ -37,7 +37,7 @@ with macro_col2:
     historical_mean = 17.1
     deviation = ((shiller_pe - historical_mean) / historical_mean) * 100
     st.metric(label="S&P 500 CAPE Ratio", value=f"{shiller_pe:.1f}", delta=f"高於歷史均值 {deviation:.1f}%", delta_color="inverse")
-    st.caption(f"歷史平均值: 17.1 | 估值偏貴時，右側動能突破必須嚴格執行移動停利。")
+    st.caption(f"歷史平均值: 17.1 | 估值偏貴時，非大牛股的動能突破高機率為假突破。")
 
 with macro_col3:
     st.markdown("##### 📅 本週關鍵財經數據行事曆")
@@ -120,14 +120,13 @@ with st.spinner("雙軌計量引擎正在提煉核心決策..."):
             df = stock.history(start=start_date_看板)
             if df.empty or len(df) < 40: continue
             
-            # 計算核心量化指標
             high_low = df['High'] - df['Low']
             tr = pd.concat([high_low, (df['High'] - df['Close'].shift(1)).abs(), (df['Low'] - df['Close'].shift(1)).abs()], axis=1).max(axis=1)
             df['ATR'] = tr.rolling(window=atr_period).mean()
             df['MA20'] = df['Close'].rolling(window=20).mean()
             df['MA200'] = df['Close'].rolling(window=200).mean()
             df['RSI'] = calculate_rsi(df['Close'], 14)
-            df['High20'] = df['High'].shift(1).rolling(window=20).max() # 過去20天最高價不含當天
+            df['High20'] = df['High'].shift(1).rolling(window=20).max()
             
             current_price = float(df.iloc[-1]['Close'])  
             ma20_center = float(df.iloc[-1]['MA20'])
@@ -138,26 +137,27 @@ with st.spinner("雙軌計量引擎正在提煉核心決策..."):
             
             highest_20d = float(df['High'].rolling(window=20).max().iloc[-1])
             trailing_stop_price = highest_20d - (2 * latest_atr)
-
             low_absorb_price = ma20_center - (latest_atr * atr_multiplier)
             
             final_action = "⚪ 觀望"
             reason_str = "未觸及多頭抄底或右側動能突破點，耐心保持現金流。"
             
-            # 🚀 雙軌制決策樹
+            # 🚀 雙軌制決策樹（導入安全防禦閥）
             if ma20_center >= latest_ma200: # 長線多頭
-                # 軌道一：左側打折抄底
                 if current_price <= low_absorb_price:
                     final_action = "🔥 強力買入"
-                    reason_str = f"優質強勢股深度拉回，跌破網格下限 (-{atr_multiplier:.1f}x ATR)，觸發黃金抄底。"
-                # 軌道二：右側強勢追價上車機制
-                elif current_price > latest_high20 and 60 <= latest_rsi <= 80:
+                    reason_str = f"優質股拉回，跌破網格下限 (-{atr_multiplier:.1f}x ATR)，黃金抄底位。"
+                # 🛡️ 安全防禦閥：必須在 60 <= RSI <= 78 之間才叫良性動能。如果 RSI 飆破 78 叫極度過熱，拒絕追高！
+                elif current_price > latest_high20 and 60 <= latest_rsi <= 78:
                     final_action = "⚡ 動能突破"
-                    reason_str = f"股價創 20 日新高，且 RSI 進入 {latest_rsi:.1f} 強勢推進區，右側強勢上車點！"
+                    reason_str = f"股價強勢創 20 日新高，且 RSI 處於健全推進區 ({latest_rsi:.1f})，順勢上車。"
+                elif current_price > latest_high20 and latest_rsi > 78:
+                    final_action = "⚪ 觀望"
+                    reason_str = f"⚠️ 雖創 20 日新高，但 RSI 高達 {latest_rsi:.1f} 已進入極度擁擠過熱區，安全閥啟動，拒絕接盤！"
             else: # 長線空頭
                 if current_price <= low_absorb_price:
                     final_action = "🔥 強力買入"
-                    reason_str = "空頭超跌至歷史網格極限，啟動極小倉位左側逆勢試探。"
+                    reason_str = "空頭結構超跌至歷史網格極限，啟動小倉位逆勢左側試探。"
 
             info = stock.info if stock.info else {}
             target_mean = info.get('targetMeanPrice')
@@ -196,7 +196,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (3年期大深度 K 線 + 雙軌實時標記版)
+# 🔍 個股動態決策軌道與核心基本面 (3年期大深度 K 線 + 雙軌安全標記版)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面 (近3年大深度雙軌制驗證版)")
 
@@ -248,20 +248,20 @@ if selected_stock:
                         arrowhead=2, arrowcolor="green", arrowsize=1, arrowwidth=2,
                         ax=0, ay=35, font=dict(color="white", size=9), bgcolor="green"
                     ))
-                # 軌道二：右側動能突破（突破20日新高 + RSI強勢區，排除熊市）
-               # elif p_ma20 >= p_ma200 and p_close > p_high20 and 60 <= p_rsi <= 80:
-                   # annotations.append(dict(
-                      #  x=date, y=row['High'], text="⚡動能", showarrow=True,
-                       # arrowhead=2, arrowcolor="#d62728", arrowsize=1, arrowwidth=2,
-                       # ax=0, ay=-35, font=dict(color="white", size=9), bgcolor="#ff7f0e"
-                   # ))
+                # 軌道二：右側動能突破（加上過熱安全閥過濾，拒絕 RSI > 78 的擁擠假突破）
+                elif p_ma20 >= p_ma200 and p_close > p_high20 and 60 <= p_rsi <= 78:
+                    annotations.append(dict(
+                        x=date, y=row['High'], text="⚡動能", showarrow=True,
+                        arrowhead=2, arrowcolor="#ff7f0e", arrowsize=1, arrowwidth=2,
+                        ax=0, ay=-35, font=dict(color="white", size=9), bgcolor="#ff7f0e"
+                    ))
 
             fig.update_layout(
                 xaxis_rangeslider_visible=False, yaxis_title="價格", height=500, 
                 template="plotly_white", annotations=annotations
             )
             st.plotly_chart(fig, use_container_width=True)
-            st.info("💡 雙軌制觀察指南：綠色【🔥強買】是左側策略，專抓打折好股票；金黃色【⚡動能】是右側策略，專抓一路衝、不回頭的噴發主升段股票。")
+            st.info("💡 雙軌安全指南：現在圖表上的金黃色【⚡動能】已經過濾掉「末跌段噴發」與「普通股假突破」。你可以切換不同股票，確認策略是否更加精準。")
             
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
@@ -298,7 +298,7 @@ if selected_stock:
         st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
-# ⏳ 策略回測績效驗證 (支持雙軌制訊號回測)
+# ⏳ 策略回測績效驗證 (支持安全型雙軌訊號回測)
 # ==============================================================================
 st.markdown("---")
 st.header("⏳ 策略回測績效驗證 (大數據多空循環驗證)")
@@ -352,7 +352,7 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 if past_ma20 >= past_ma200:
                     if past_close <= low_b:
                         signal = "🔥 強力買入"
-                    elif past_close > past_high20 and 60 <= past_rsi <= 80:
+                    elif past_close > past_high20 and 60 <= past_rsi <= 78:
                         signal = "⚡ 動能突破"
                 
                 if signal:
