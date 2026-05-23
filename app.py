@@ -2,16 +2,20 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
+from plotly.subplots
+import make_subplots
+from datetime
+import datetime, timedelta
 import json
 import re
 import google.generativeai as genaiimport streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
+from plotly.subplots
+import make_subplots
+from datetime
+import datetime, timedelta
 import json
 import re
 import google.generativeai as genai
