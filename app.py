@@ -4,15 +4,14 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
+import json
+import re
+import google.generativeai as genai
 
-# 1. 網頁基本設定
 st.set_page_config(layout="wide", page_title="股票決策系統")
 st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
 st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並依據您設定的**MA20對稱 ATR 網格**給予五等 Action 建議。")
 
-# ==============================================================================
-# 🌐 第一層：全球總體經濟與市場情緒觀測站
-# ==============================================================================
 st.markdown("### 🌐 全球總體經濟與市場情緒觀測站")
 macro_col1, macro_col2, macro_col3 = st.columns([1, 1, 2])
 
@@ -47,9 +46,6 @@ with macro_col3:
     calendar_df = pd.DataFrame(calendar_data)
     st.dataframe(calendar_df, use_container_width=True, hide_index=True)
 
-# ==============================================================================
-# 📖 ✨ 精簡化實戰使用指南
-# ==============================================================================
 with st.expander("✨ 系統實戰使用指南 📖 ", expanded=False):
     st.markdown("""
     歡迎使用**🦅 極簡五等燈號自動化決策系統**！本系統將複雜指標降維，請參考以下核心邏輯進行操作：
@@ -61,12 +57,11 @@ with st.expander("✨ 系統實戰使用指南 📖 ", expanded=False):
     2. **🟢 買點 (支撐位)**：`20MA - 1.4*ATR`（可於左側選單自訂 ATR 倍數）。
     3. **🔴 賣點 (壓力位)**：`20MA + 1.4*ATR`（可於左側選單自訂 ATR 倍數）。
     4. **🛡️ 移動停利價位**：股價上漲時，停利點也會跟著自動上移，確保獲利入袋！
-       * *範例：買在 100 ➔ 漲到 110（停利設@100） ➔ 漲到 150（停利設@140）...以此類推。*
 
     ### (B) 市場狀態與操作策略
     1. **💰 資金有限**：建議優先鎖定亮起「**🔥 強力買入**」的個股，且單筆建倉建議 **< 總資金的 10%**。
     2. **📉 空頭結構 (會跌)** ➔ 趨勢向下，**絕對不碰！**
-    3. **⚖️ 震盪結構 (盤整)** ➔ 嚴格遵循「買點買、賣點賣」（怕被套牢建議挑選穩健大型股）。
+    3. **⚖️ 震盪結構 (盤整)** ➔ 嚴格遵循「買點買、賣點賣」。
     4. **📈 多頭結構 (會漲)** ➔ 遵循「買點買入 + 跌破移動停利才賣出」，拚取最大波段獲利。
     5. **🕵️ 基本面防雷**：買入前請再次透過下方看板，確保股價便宜**並非**來自公司營運出狀況！
 
@@ -77,9 +72,6 @@ with st.expander("✨ 系統實戰使用指南 📖 ", expanded=False):
 
 st.markdown("---")
 
-# ==============================================================================
-# ✨ 第三層：AGI 2027 敘事與 SALP 聰明錢觀測站 (內化版)
-# ==============================================================================
 st.markdown("### 🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站")
 salp_col1, salp_col2 = st.columns([1, 1.8])
 
@@ -101,52 +93,32 @@ with salp_col2:
 
 st.markdown("---")
 
-# ==============================================================================
-# 4. 內建核心產業與供應鏈地圖 (嚴格群組分類，不超10字，無英文無台股)
-# ==============================================================================
 INITIAL_SECTOR_MAP = {
-    # 晶圓代工製程
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
     "AXTI": "晶圓代工製程", "SIMO": "晶圓代工製程", "ALAB": "晶圓代工製程", "SMH": "晶圓代工製程",
-
-    # 光通訊與網通
     "CSCO": "光通訊與網通", "ANET": "光通訊與網通", "GLW": "光通訊與網通", "COHR": "光通訊與網通", 
     "LITE": "光通訊與網通", "AAOI": "光通訊與網通", "FN": "光通訊與網通", "CIEN": "光通訊與網通", 
     "NOK": "光通訊與網通",  
-    
-    # 記憶體與儲存
     "DRAM": "記憶體與儲存", "MU": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體與儲存",
-    
-    # 基礎設備
     "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建",
     "VRT": "機房液冷散熱", "MOD": "機房液冷散熱", "3017.TW": "機房液冷散熱",
     "CEG": "核能與天然氣", "VST": "核能與天然氣", "ENPH": "綠能與微電網", "SEDG": "綠能與微電網",
-    
-    # 核心晶片設計與代工
     "SOXX": "AI晶片與設計", "XSD": "AI晶片與設計", "NVDA": "AI晶片與設計", "AVGO": "AI晶片與設計", 
     "AMD": "AI晶片與設計", "QCOM": "AI晶片與設計", "MRVL": "AI晶片與設計", "TXN": "AI晶片與設計", 
     "ADI": "AI晶片與設計", "ON": "AI晶片與設計", "MPWR": "AI晶片與設計", "NVTS": "AI晶片與設計", "2454.TW": "AI晶片與設計",
-    
-    # 軟體平台與科技巨頭
     "QQQ": "市值型大盤", "MAGS": "市值型大盤", "MSFT": "AI巨頭與軟體", "AAPL": "AI巨頭與軟體", 
     "GOOGL": "AI巨頭與軟體", "AMZN": "AI巨頭與軟體", "META": "AI巨頭與軟體", "PLTR": "AI巨頭與軟體", 
     "NOW": "AI巨頭與軟體", "ORCL": "AI巨頭與軟體", "APP": "AI巨頭與軟體", "NET": "AI巨頭與軟體", 
     "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", "2382.TW": "AI巨頭與軟體", "CBRS": "AI巨頭與軟體",
-    
-    # 國防航太
     "ARKX": "航太太空國防", "NASA": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
-    "BA": "航太太空國防", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", "ONDS": "航太太空國防",
-    
-    # 傳統資源與其餘板塊
+    "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", "ONDS": "航太太空國防",
     "XOM": "傳統能源礦產", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
     "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技",
     "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
     "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理",
     "TSLA": "智能車新能源", "BYDDF": "智能車新能源", "MSTR": "數位資產科技", 
     "BRK-B": "綜合控股投資", "GLD": "綜合控股投資", "SHLD": "綜合控股投資", "NBIS": "綜合控股投資",
-
-    # 核心基本觀察
     "2330.TW": "晶圓代工製程", "0050.TW": "市值型大盤", "2851.TW": "金融再保險", "5607.TW": "航空航運物流",
 }
 
@@ -188,9 +160,6 @@ with st.spinner("正在提煉核心決策..."):
             df = stock.history(start=start_date)
             if df.empty or len(df) < 220: continue
             
-            # ==========================================
-            # 📊 公允價值運算 (對齊 TradingView 華爾街分析師目標價共識)
-            # ==========================================
             info = stock.info if stock.info else {}
             target_low = info.get('targetLowPrice')
             target_mean = info.get('targetMeanPrice')
@@ -203,7 +172,6 @@ with st.spinner("正在提煉核心決策..."):
                 else:
                     fair_value_str = f"{currency_symbol}{target_mean:.1f}"
 
-            # 指標運算
             high_low = df['High'] - df['Low']
             tr = pd.concat([high_low, (df['High'] - df['Close'].shift(1)).abs(), (df['Low'] - df['Close'].shift(1)).abs()], axis=1).max(axis=1)
             df['ATR'] = tr.rolling(window=atr_period).mean()
@@ -274,7 +242,6 @@ with st.spinner("正在提煉核心決策..."):
             })
         except Exception: pass
 
-# --- 介面排版輸出 ---
 st.header("🚨 今日核心執行 ACTION 面板")
 if action_alerts:
     st.dataframe(pd.DataFrame(action_alerts), use_container_width=True, hide_index=True)
@@ -293,13 +260,10 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (AI 聯網智慧撈取免維護版 - 修正完工版)
+# 🔍 個股動態決策軌道與核心基本面
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
-import json
-import re
 
-# 自動計算預設個股位置
 sorted_tickers = sorted(active_tickers)
 default_index = sorted_tickers.index("TSM") if "TSM" in sorted_tickers else 0
 
@@ -310,23 +274,14 @@ selected_stock = st.selectbox(
 )
 
 def get_live_guidance_via_ai(stock_code):
-    """
-    透過 AI 聯網功能，精準抓取最新年度指引，並做嚴格的字串清洗防止 JSON 解析失敗
-    """
     try:
-        import google.generativeai as genai
-        import json
-        
-        # 1. 確保金鑰正確帶入
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         
-        # 2. 宣告相容免費方案的 Google 搜尋聯網工具
         model = genai.GenerativeModel(
             model_name='gemini-1.5-flash',
             tools=[{"google_search": {}}]
         )
         
-        # 3. 升級 Prompt：嚴格規範回傳，不讓 AI 有機會多講廢話
         prompt = f"""
         你現在是一個專業的財經數據清洗機器人。
         請即時搜尋網路公開新聞、財報與法說會快訊，查詢股票代碼 {stock_code} 官方最新公布的：
@@ -340,18 +295,13 @@ def get_live_guidance_via_ai(stock_code):
         
         response = model.generate_content(prompt)
         response_text = response.text.strip()
-        
-        # 4. 強效防禦層：改用簡單的 replace 剝殼，徹底避開 re.sub 的字串截斷語法錯誤
         response_text = response_text.replace("```json", "").replace("```", "").strip()
         
-        # 5. 解析 JSON
         data = json.loads(response_text)
         return data.get("capex", "無數據"), data.get("growth", "無數據")
         
     except Exception as e:
-        # 如果發生解析或連線錯誤，在 Metric 上呈現，方便一眼看出問題
         return f"暫無數據 (錯誤: {str(e)[:20]})", "暫無數據"
-        
 
 if selected_stock:
     try:
@@ -359,7 +309,6 @@ if selected_stock:
         df_detail = stock_detail.history(start=start_date)
         
         if not df_detail.empty and len(df_detail) > 200:
-            # 繪製 K 線軌道圖
             df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
             df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
             
@@ -370,22 +319,18 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
-            # --- 核心 AI 聯網數據層 ---
             with st.spinner("🚀 AI 正在聯網查閱最新法說會與財報指引..."):
                 capex_str, rev_growth_str = get_live_guidance_via_ai(selected_stock)
             
-            # 撈取即時估值 (PE)
             info = stock_detail.info if stock_detail.info else {}
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
             
-            # --- 前端面板渲染 ---
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
             col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="AI 即時聯網查閱官方最新 Forward Guidance 指引，完全免人工維護")
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
             
-            # 自動化行事曆
             st.markdown("##### 📅 該個股最新官方公告之行事曆與預期")
             try:
                 calendar = stock_detail.calendar
@@ -400,7 +345,7 @@ if selected_stock:
         st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
-# ⏳ 策略回測績效驗證 (Scan-Forward 尋找首個買點機制)
+# ⏳ 策略回測績效驗證
 # ==============================================================================
 st.markdown("---")
 st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
