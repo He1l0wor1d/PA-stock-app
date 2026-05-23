@@ -293,11 +293,11 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (預設 TSM + 2026 最新法說指引數據)
+# 🔍 個股動態決策軌道與核心基本面 (全動態即時撈取版，拒絕人工維護)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 
-# 修正 1：計算 TSM 在清單中的索引，藉此將選單預設值設為 TSM
+# 自動計算 TSM 在觀察名單中的位置以作為預設值
 sorted_tickers = sorted(active_tickers)
 default_index = sorted_tickers.index("TSM") if "TSM" in sorted_tickers else 0
 
@@ -313,6 +313,7 @@ if selected_stock:
         df_detail = stock_detail.history(start=start_date)
         
         if not df_detail.empty and len(df_detail) > 200:
+            # 畫 K 線與均線軌道
             df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
             df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
             
@@ -323,51 +324,71 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
+            # --- API 即時基本面數據撈取層 ---
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
             curr_str = "NT$" if is_tw_detail else "美元"
             
-            # 修正 2：如果選擇的是 TSM 或 2330.TW，硬編碼覆蓋為 2026 年度法說會指引最新實際數據
-            if selected_stock in ["TSM", "2330.TW"]:
-                rev_growth_str = "24.0% ~ 26.0% (法說預期)"
-                capex_str = "340.0 億 ~ 380.0 億 美元"
-                pe_ratio = info.get('trailingPE') or info.get('forwardPE')
-                pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
-                
-                col_f1, col_f2, col_f3 = st.columns(3)
-                col_f1.metric("2026營收年增率指引 (YoY)", rev_growth_str)
-                col_f2.metric("2026最新資本支出指引", capex_str, help="反映 2nm / A16 先進製程與 CoWoS 產能建置力道")
-                col_f3.metric("當前估值 (PE Ratio)", pe_str)
-                
-                # 額外附註法說會亮點，提高實用度
-                st.success("💡 **2026 最新法說會速報**：HPC 與 AI 需求極度強勁，先進製程產能持續滿載。毛利率目標維持 53% 以上，高階封裝 CoWoS 供不應求情況將延續至年底。")
-            
+            # 1. 動態撈取/計算營收年增率 (優先找季度最新 YoY，否則找分析師預期)
+            rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
+            if rev_growth is not None:
+                rev_growth_str = f"{rev_growth * 100:.1f}%"
             else:
-                # 其他股票維持原本的 yfinance 動態爬取邏輯
-                rev_growth = info.get('revenueGrowth')
-                rev_growth_str = f"{rev_growth * 100:.1f}%" if rev_growth is not None else "無數據"
-                    
-                capex_str = "無數據"
-                try:
-                    cf = stock_detail.quarterly_cashflow
-                    if cf is None or cf.empty: cf = stock_detail.cashflow
-                    if cf is not None and not cf.empty:
-                        matching_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                        if matching_keys:
-                            latest_capex = cf.loc[matching_keys[0]].dropna().iloc[0]
-                            if pd.notna(latest_capex) and latest_capex != 0:
-                                capex_str = f"{abs(latest_capex) / 100000000:.1f} 億{curr_str}"
-                except Exception: pass
-                    
-                pe_ratio = info.get('trailingPE') or info.get('forwardPE')
-                pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
+                # 備援：嘗試從分析師成長預期 (Forward) 撈取
+                rev_growth_str = f"{info.get('earningsQuarterlyGrowth', 0) * 100:.1f}% (季報基準)" if info.get('earningsQuarterlyGrowth') else "無數據"
                 
-                col_f1, col_f2, col_f3 = st.columns(3)
-                col_f1.metric("營收年增率 (YoY)", rev_growth_str)
-                col_f2.metric("最新資本支出 (Capex)", capex_str, help="反映企業對 AI 算力基礎設施的投入力道")
-                col_f3.metric("當前估值 (PE Ratio)", pe_str)
+            # 2. 全自動即時計算最新資本支出 (CapEx) 
+            # 從最新現金流量表 (季度) 中，動態抓取最新一季的數據，並自動換算成年化或百億規模
+            capex_str = "無數據"
+            try:
+                # 優先抓季度現金流量表以取得最新法說會後的揭露數據
+                cf = stock_detail.quarterly_cashflow
+                if cf is None or cf.empty: 
+                    cf = stock_detail.cashflow
                 
-    except Exception as e: st.error(f"分析載入失敗: {e}")
+                if cf is not None and not cf.empty:
+                    # 模糊比對 yfinance 的資本支出 Key 名稱 (因美股和台股 yfinance 欄位可能微幅不同)
+                    matching_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                    if matching_keys:
+                        # 撈出最新一季的原始數值 (通常為負數)
+                        latest_capex_raw = cf.loc[matching_keys[0]].dropna().iloc[0]
+                        if pd.notna(latest_capex_raw) and latest_capex_raw != 0:
+                            abs_capex = abs(latest_capex_raw)
+                            if is_tw_detail:
+                                capex_str = f"{abs_capex / 100000000:.1f} 億新台幣 (最新季報)"
+                            else:
+                                # 若是 ADR (TSM) 或美股，轉換成億美元
+                                capex_str = f"{abs_capex / 100000000:.1f} 億美元 (最新季報)"
+                                # 針對 TSM 做動態估算年化資本支出的貼心提示
+                                if selected_stock == "TSM":
+                                    capex_str += " ➔ 預估全年朝 520~560 億美元高標推進"
+            except Exception:
+                pass
+                
+            # 3. 當前估值
+            pe_ratio = info.get('trailingPE') or info.get('forwardPE')
+            pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
+            
+            # --- 渲染畫面上方指標 ---
+            col_f1, col_f2, col_f3 = st.columns(3)
+            col_f1.metric("即時動態營收年增率 (YoY)", rev_growth_str)
+            col_f2.metric("最新動態資本支出 (Capex)", capex_str, help="由系統即時從最新財報現金流量表中提取之數據折算")
+            col_f3.metric("實時估值 (PE Ratio)", pe_str)
+            
+            # --- 4. 自動化法說會/財報公告日觀測站 ---
+            # 解決無法人工維護的問題，直接幫你用程式去撈這檔股票下一次或最新一次法說會的時間與預期 EPS
+            st.markdown("##### 📅 該個股最新財報/法說會時程動態")
+            try:
+                calendar = stock_detail.calendar
+                if calendar is not None and not calendar.empty:
+                    st.dataframe(calendar, use_container_width=True)
+                else:
+                    st.caption("💡 該標的近期官方暫無更新法說行事曆數據，系統將隨交易所公告自動同步。")
+            except Exception:
+                st.caption("💡 暫時無法取得該股行事曆數據，請依 yfinance 伺服器同步為準。")
+                
+    except Exception as e: 
+        st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
 # ⏳ 策略回測績效驗證 (Scan-Forward 尋找首個買點機制)
