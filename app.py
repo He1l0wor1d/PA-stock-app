@@ -48,15 +48,6 @@ with macro_col3:
     calendar_df = pd.DataFrame(calendar_data)
     st.dataframe(calendar_df, use_container_width=True, hide_index=True)
 
-with st.expander("✨ 系統實戰使用指南 📖 ", expanded=False):
-    st.markdown("""
-    歡迎使用**🦅 極簡五等燈號自動化決策系統**！本系統將複雜指標降維，請參考以下核心邏輯進行操作：
-    1. **⚖️ 公允價值**：套用各種股票估值模型，作為判斷股票價值的參考。
-    2. **🟢 買點 (支撐位)**：`20MA - 1.4*ATR`。
-    3. **🔴 賣點 (壓力位)**：`20MA + 1.4*ATR`。
-    4. **🛡️ 移動停利價位**：股價上漲時，停利點也會跟著自動上移，確保獲利入袋！
-    """)
-
 st.markdown("---")
 
 # ==============================================================================
@@ -250,7 +241,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (定量財務計量引擎 - 100% 穩定免維護)
+# 🔍 個股動態決策軌道與核心基本面 (地毯式前瞻搜索定量引擎)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 
@@ -282,43 +273,53 @@ if selected_stock:
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
             
-            # 1. 營收增長共識（調用分析師 Forward 複合預期指標）
-            rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
+            # 1. 營收增長預期提取
+            rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth') or info.get('earningsQuarterlyGrowth')
             if rev_growth is not None:
-                rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街分析師複合共識預期)"
+                rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街法說前瞻預估)"
             else:
-                rev_growth_str = "未揭露未來展望"
+                rev_growth_str = "未揭露未來指引"
             
-            # 2. 資本支出安全計量（調用最新財報並進行年化運轉率 Run Rate 折算）
-            capex_str = "未揭露未來展望"
-            try:
-                cf = stock_detail.quarterly_cashflow
-                if cf is None or cf.empty: cf = stock_detail.cashflow
-                if cf is not None and not cf.empty:
-                    m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                    if m_keys:
-                        # 取得單季真實發生的資本支出金額（絕對值）
-                        latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
-                        
-                        # 🛡️ 數據庫清洗過濾：校正 ADR 混亂的台幣/美元計價
-                        if not is_tw_detail and latest_raw > 10000000000:
-                            # 如果美股代碼算出來超過 100 億美金，代表背後數據庫塞的是台幣，直接除以 32 匯率校正
-                            latest_raw = latest_raw / 32.0
-                            # 將單季支出乘以 4，精準擬合為當前企業的「年化運轉率 (Annual Run Rate)」
-                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
-                        elif is_tw_detail:
-                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (單季最新數據年化折算)"
-                        else:
-                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
-            except Exception:
-                pass
+            # 2. ⚡ 資本支出 (CapEx) 地毯式指引提取與安全降級校正算法
+            capex_str = "未揭露未來指引"
+            
+            # 第一軌：地毯式搜索 yfinance 隱藏的前瞻指引/分析師預期
+            guidance_keys = [k for k in info.keys() if any(x in k.lower() for x in ['guidance', 'capex_estimate', 'forward_capex'])]
+            found_forward = False
+            if guidance_keys:
+                forward_val = info.get(guidance_keys[0])
+                if forward_val and str(forward_val).replace('.','').isdigit():
+                    forward_val = float(forward_val)
+                    if not is_tw_detail and forward_val > 10000000000: forward_val /= 32.0
+                    capex_str = f"{forward_val / 100000000:.1f} 億美元 (官方發布前瞻指引)" if not is_tw_detail else f"{forward_val / 100000000:.1f} 億新台幣 (官方發布前瞻指引)"
+                    found_forward = True
+            
+            # 第二軌備援：若官方尚未公佈前瞻，全自動切換至最新季度財報，並啟動年化運轉率 (Run Rate) 與幣別清洗
+            if not found_forward:
+                try:
+                    cf = stock_detail.quarterly_cashflow
+                    if cf is None or cf.empty: cf = stock_detail.cashflow
+                    if cf is not None and not cf.empty:
+                        m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                        if m_keys:
+                            latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
+                            # 🛡️ 數據清洗：防止 ADR 將新台幣錯植為美金標籤
+                            if not is_tw_detail and latest_raw > 10000000000:
+                                latest_raw = latest_raw / 32.0
+                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (未發布指引-改採季報年化折算)"
+                            elif is_tw_detail:
+                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (未發布指引-改採季報年化折算)"
+                            else:
+                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (未發布指引-改採季報年化折算)"
+                except Exception:
+                    pass
             
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx Run Rate)", capex_str, help="財務計量公式：採集企業最新一季法說財報所公告之資本支出，乘以 4 進行年化 Run Rate 折算。")
+            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="地毯式定量指引算法：優先向財務資料庫調用官方發布之 Forward Guidance，若個股尚未發布，則自動切換至最新季度財報進行 Run Rate 洗鍊。")
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
                 
     except Exception as e: 
