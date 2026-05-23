@@ -1,12 +1,16 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from datetime import datetime, timedelta
+import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from datetime import datetime, timedelta
+import json
+import re
 
 st.set_page_config(layout="wide", page_title="股票決策系統")
-st.title("🦅 逢低抄底(Buy the Dip) 專業計量版")
-st.markdown("已移除動能指標。系統現在監測：(1) ATR動態網格 (2) 200MA 極端乖離率防禦，確保只有在大跌時才觸發抄底。")
+st.title("🦅 美股+台股『極簡五等燈號』雙軌制決策系統")
+st.markdown("本系統已進化為**雙軌制安全引擎**：具備左側抄底的**【🔥強買】**，與具備防追高安全閥的右側**【⚡動能突破】**。")
 
 # ==============================================================================
 # 🌐 第一層：全球總體經濟與市場情緒觀測站
@@ -205,54 +209,93 @@ selected_stock = st.selectbox(
     index=default_index
 )
 
-def get_strategy_signal(df, atr_multiplier=1.4):
-    # 核心公式：網格下限 (動態) + 極端乖離防禦 (靜態)
-    # 乖離防禦：如果股價小於 200MA 的 70% (即跌幅超過30%)，強制抄底
-    low_bound_atr = df['MA20'] - (df['ATR'] * atr_multiplier)
-    extreme_bias = df['MA200'] * 0.7 
-    
-    signals = []
-    for i in range(len(df)):
-        price = df['Close'].iloc[i]
-        ma200 = df['MA200'].iloc[i]
-        ma20 = df['MA20'].iloc[i]
-        
-        # 買入條件：1. 股價破網格  OR  2. 股價觸發 30% 極端乖離
-        if (price <= low_bound_atr.iloc[i] or price <= extreme_bias.iloc[i]) and (price > 0):
-            signals.append(True)
-        else:
-            signals.append(False)
-    return signals
-
-# 🚀 K線圖繪製（強化版）
 if selected_stock:
     try:
         stock_detail = yf.Ticker(selected_stock)
         df_detail = stock_detail.history(start=start_date_3years)
         
-        # ... (計算 ATR, MA20, MA200) ...
-        df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
-        df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
-        
-        # 標記訊號
-        signal_flags = get_strategy_signal(df_detail, atr_multiplier)
-        
-        fig = go.Figure()
-        fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
-        
-        # 只標註強買
-        annotations = []
-        for i in range(len(df_detail)):
-            if signal_flags[i]:
-                date = df_detail.index[i]
-                price = df_detail['Close'].iloc[i]
-                annotations.append(dict(
-                    x=date, y=price, text="🔥強買", showarrow=True,
-                    arrowhead=2, arrowcolor="green", arrowsize=1, arrowwidth=2,
-                    ax=0, ay=35, font=dict(color="white", size=9), bgcolor="green"
-                ))
-        
-     
+        if not df_detail.empty and len(df_detail) > 40:
+            df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
+            df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
+            df_detail['RSI_plot'] = calculate_rsi(df_detail['Close'], 14)
+            df_detail['High20_plot'] = df_detail['High'].shift(1).rolling(window=20).max()
+            
+            high_low_det = df_detail['High'] - df_detail['Low']
+            tr_det = pd.concat([high_low_det, (df_detail['High'] - df_detail['Close'].shift(1)).abs(), (df_detail['Low'] - df_detail['Close'].shift(1)).abs()], axis=1).max(axis=1)
+            df_detail['ATR_det'] = tr_det.rolling(window=atr_period).mean()
+            
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=2.5)))
+            
+            # 🚀 歷史回溯 3 年內所有符合雙軌策略臨界點的日期並標記
+            annotations = []
+            for date, row in df_detail.dropna(subset=['MA20_plot', 'MA200', 'ATR_det', 'RSI_plot', 'High20_plot']).iterrows():
+                p_close = row['Close']
+                p_ma20 = row['MA20_plot']
+                p_ma200 = row['MA200']
+                p_atr = row['ATR_det']
+                p_rsi = row['RSI_plot']
+                p_high20 = row['High20_plot']
+                
+                low_bound = p_ma20 - (p_atr * atr_multiplier)
+                
+                # 軌道一：左側打折抄底（大趨勢多頭下拉回）
+                if p_ma20 >= p_ma200 and p_close <= low_bound:
+                    annotations.append(dict(
+                        x=date, y=row['Low'], text="🔥強買", showarrow=True,
+                        arrowhead=2, arrowcolor="green", arrowsize=1, arrowwidth=2,
+                        ax=0, ay=35, font=dict(color="white", size=9), bgcolor="green"
+                    ))
+                # 軌道二：右側動能突破（加上過熱安全閥過濾，拒絕 RSI > 78 的擁擠假突破）
+                elif p_ma20 >= p_ma200 and p_close > p_high20 and 60 <= p_rsi <= 78:
+                    annotations.append(dict(
+                        x=date, y=row['High'], text="⚡動能", showarrow=True,
+                        arrowhead=2, arrowcolor="#ff7f0e", arrowsize=1, arrowwidth=2,
+                        ax=0, ay=-35, font=dict(color="white", size=9), bgcolor="#ff7f0e"
+                    ))
+
+            fig.update_layout(
+                xaxis_rangeslider_visible=False, yaxis_title="價格", height=500, 
+                template="plotly_white", annotations=annotations
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            st.info("💡 雙軌安全指南：現在圖表上的金黃色【⚡動能】已經過濾掉「末跌段噴發」與「普通股假突破」。你可以切換不同股票，確認策略是否更加精準。")
+            
+            info = stock_detail.info if stock_detail.info else {}
+            is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
+            
+            rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
+            rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街分析師複合共識預期)" if rev_growth is not None else "未揭露未來展望"
+            
+            capex_str = "未揭露未來指引"
+            try:
+                cf = stock_detail.quarterly_cashflow
+                if cf is None or cf.empty: cf = stock_detail.cashflow
+                if cf is not None and not cf.empty:
+                    m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                    if m_keys:
+                        latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
+                        if not is_tw_detail and latest_raw > 10000000000:
+                            latest_raw = latest_raw / 32.0
+                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
+                        elif is_tw_detail:
+                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (單季最新數據年化折算)"
+                        else:
+                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
+            except Exception: pass
+            
+            pe_ratio = info.get('trailingPE') or info.get('forwardPE')
+            pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
+            
+            col_f1, col_f2, col_f3 = st.columns(3)
+            col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
+            col_f2.metric("2026 全年資本支出指引 (CapEx Run Rate)", capex_str)
+            col_f3.metric("實時估值 (PE Ratio)", pe_str)
+                
+    except Exception as e: 
+        st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
 # ⏳ 策略回測績效驗證 (支持安全型雙軌訊號回測)
