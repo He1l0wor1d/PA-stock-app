@@ -358,7 +358,7 @@ if selected_stock:
 
                 clean_ticker = selected_stock.strip().upper()
 
-                else:
+                elif:
                     # 2. 其他個股：自動比對 yfinance 的前瞻預估與歷史滾動加總
                     info_capex = info.get('capitalExpenditure')
                     
