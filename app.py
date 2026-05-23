@@ -12,6 +12,9 @@ st.set_page_config(layout="wide", page_title="股票決策系統")
 st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
 st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並依據您設定的**MA20對稱 ATR 網格**給予五等 Action 建議。")
 
+# ==============================================================================
+# 🌐 第一層：全球總體經濟與市場情緒觀測站
+# ==============================================================================
 st.markdown("### 🌐 全球總體經濟與市場情緒觀測站")
 macro_col1, macro_col2, macro_col3 = st.columns([1, 1, 2])
 
@@ -67,11 +70,14 @@ with st.expander("✨ 系統實戰使用指南 📖 ", expanded=False):
 
     ### (C) 系統其他功能
     1. **🔍 K線圖 & 個股動態**：於下方選單一鍵調閱個股走勢，並檢視最新營收與資本支出 (Capex)。
-    2. **⏳ 策略回測績效验证**：利用網頁最下方的「時光機」，一鍵掃描過去買點，用真實數據驗證策略勝率。
+    2. **⏳ 策略回測績效驗證**：利用網頁最下方的「時光機」，一鍵掃描過去買點，用真實數據驗證策略勝率。
     """)
 
 st.markdown("---")
 
+# ==============================================================================
+# ✨ 第三層：AGI 2027 敘事與 SALP 聰明錢觀測站 (內化版)
+# ==============================================================================
 st.markdown("### 🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站")
 salp_col1, salp_col2 = st.columns([1, 1.8])
 
@@ -93,6 +99,9 @@ with salp_col2:
 
 st.markdown("---")
 
+# ==============================================================================
+# 4. 內建核心產業與供應鏈地圖 (嚴格群組分類，不超10字，無英文無台股)
+# ==============================================================================
 INITIAL_SECTOR_MAP = {
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
@@ -295,8 +304,16 @@ def get_live_guidance_via_ai(stock_code):
         
         response = model.generate_content(prompt)
         response_text = response.text.strip()
+        
+        # 精確清洗可能附帶的各種 Markdown 或額外換行字元
         response_text = response_text.replace("```json", "").replace("```", "").strip()
         
+        # 尋找第一個 '{' 和最後一個 '}' 進行極致清洗，阻絕非結構化雜質
+        start_idx = response_text.find('{')
+        end_idx = response_text.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            response_text = response_text[start_idx:end_idx+1]
+            
         data = json.loads(response_text)
         return data.get("capex", "無數據"), data.get("growth", "無數據")
         
@@ -333,21 +350,6 @@ if selected_stock:
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
             col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="AI 即時聯網查閱官方最新 Forward Guidance 指引")
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
-            
-            st.markdown("##### 📅 該個股最新官方公告之行事曆與預期")
-            
-            try:
-                raw_cal = stock_detail.get_calendar() if hasattr(stock_detail, 'get_calendar') else None
-                if raw_cal is not None and not (isinstance(raw_cal, pd.DataFrame) and raw_cal.empty):
-                    st.dataframe(raw_cal, use_container_width=True)
-                else:
-                    cal_dict = stock_detail._calendar if hasattr(stock_detail, '_calendar') else {}
-                    if cal_dict and isinstance(cal_dict, dict):
-                        st.json(cal_dict)
-                    else:
-                        st.caption("💡 該標的近期官方暫無更新法說行事曆數據。")
-            except Exception:
-                st.caption("💡 暫時無法取得該股行事曆數據，請依官方公告為準。")
                 
     except Exception as e: 
         st.error(f"分析載入失敗: {e}")
