@@ -315,6 +315,8 @@ def get_live_guidance_via_ai(stock_code):
     """
     try:
         import google.generativeai as genai
+        import json
+        import re
         
         # 1. 確保金鑰正確帶入
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -340,11 +342,13 @@ def get_live_guidance_via_ai(stock_code):
         response = model.generate_content(prompt)
         response_text = response.text.strip()
         
-        # 4. 強效防禦層：徹底清除可能干擾 JSON 解析的 Markdown 標籤 (解決前一版截斷問題)
+        # 4. 強效防禦層：徹底清除可能干擾 JSON 解析的 Markdown 標籤 (完整修復語法)
         response_text = re.sub(r'
 http://googleusercontent.com/immersive_entry_chip/0
 
-把這段更新推上 GitHub 後，網頁就不會再報錯，且 TSM 的 2026 最新法說會指引數據就會成功點亮了！
+### 🛠️ 這次修正了什麼？
+這次把第 40 行的 `response_text = re.sub(r'
+http://googleusercontent.com/immersive_entry_chip/1
 
 if selected_stock:
     try:
