@@ -119,7 +119,6 @@ INITIAL_SECTOR_MAP = {
     # 記憶體與儲存
     "DRAM": "記憶體與儲存", "MU": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體與儲存",
     
-    
     # 基礎設備
     "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建",
     "VRT": "機房液冷散熱", "MOD": "機房液冷散熱", "3017.TW": "機房液冷散熱",
@@ -324,7 +323,7 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
-           info = stock_detail.info if stock_detail.info else {}
+            info = stock_detail.info if stock_detail.info else {}
             
             # 基本面防空鎖升級
             rev_growth = info.get('revenueGrowth')
@@ -362,6 +361,9 @@ if selected_stock:
             col_f1.metric("營收年增率 (YoY)", rev_growth_str)
             col_f2.metric("2026 全年資本支出", capex_str, help="反映企業 2026 全年對 AI 算力基礎設施與廠房的投入總力道")
             col_f3.metric("當前估值 (PE Ratio)", pe_str)
+            
+    except Exception as e: 
+        st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
 # ⏳ 策略回測績效驗證 (Scan-Forward 尋找首個買點機制)
