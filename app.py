@@ -175,7 +175,7 @@ summary_data = []
 action_alerts = []
 action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
 
-with st.spinner("正在提煉五等核心 ACTION 決策與計算華爾街分析師目標價共識..."):
+with st.spinner("正在提煉核心決策..."):
     for ticker in active_tickers:
         try:
             ticker_sector = st.session_state.sector_map.get(ticker, "未分類")
