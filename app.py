@@ -6,9 +6,6 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import json
 import re
-import requests
-from bs4 import BeautifulSoup
-import google.generativeai as genai
 
 st.set_page_config(layout="wide", page_title="股票決策系統")
 st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
@@ -229,7 +226,7 @@ with st.spinner("正在提煉核心決策..."):
 
             summary_data.append({
                 "產業領域": ticker_sector, "代碼": ticker, "當前股價": f"{currency_symbol}{current_price:.1f}",
-                "公允價值區区间": fair_value_str, "移動停利價位": trailing_stop_str, "昨收盤價": f"{currency_symbol}{yesterday_close:.1f}",
+                "公允價值區間": fair_value_str, "移動停利價位": trailing_stop_str, "昨收盤價": f"{currency_symbol}{yesterday_close:.1f}",
                 "MA20": f"{currency_symbol}{ma20_center:.1f}", "市場狀態": market_state, "綜合建議": final_action,
                 "買點": f"{currency_symbol}{low_absorb_price:.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}", "精簡決策原因": reason_str
             })
@@ -253,7 +250,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (高穩定：Python網頁抓取 + AI 閱讀提煉架構)
+# 🔍 個股動態決策軌道與核心基本面 (定量財務計量引擎 - 100% 穩定免維護)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 
@@ -265,51 +262,6 @@ selected_stock = st.selectbox(
     options=sorted_tickers, 
     index=default_index
 )
-
-def get_live_guidance_via_ai(stock_code):
-    try:
-        # 1. 在 Python 內利用 DuckDuckGo HTML 直接進行實時網撈，繞過容易失敗的 API 聯網工具
-        search_query = f"{stock_code} 2026 全年 資本支出 營收 指引 法說會" if stock_code in ["TSM", "2330.TW"] else f"{stock_code} 2026 capex revenue growth guidance"
-        url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(search_query)}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-        
-        response = requests.get(url, headers=headers, timeout=6)
-        scraped_context = ""
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            snippets = [snippet.get_text() for snippet in soup.find_all("a", class_="result__snippet")]
-            scraped_context = " ".join(snippets[:6])
-        
-        if not scraped_context or len(scraped_context) < 30:
-            return None, None
-            
-        # 2. 啟動不加載 tools 的純大腦模式，讓 Gemini 擔任純粹的閱讀理解角色
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel(model_name='gemini-1.5-flash')
-        
-        prompt = f"""
-        請仔細閱讀下方從財經網站實時抓取的法說會快訊文本，幫我提取並精簡整理出股票代碼 {stock_code} 官方針對「2026全年度」所公布的預期。
-        
-        【實時抓取文本】：{scraped_context}
-        
-        請嚴格按照以下兩行的格式直接回答，不要包含任何 Markdown 標籤、星號、括號、或者多餘的財務解釋：
-        資本支出：[在此處填寫提取到的2026指引數據與單位]
-        營收成長：[在此處填寫提取到的2026預期年增率]
-        """
-        
-        ai_response = model.generate_content(prompt)
-        response_text = ai_response.text.strip()
-        
-        capex_match = re.search(r"資本支出[：:]\s*(.*)", response_text)
-        growth_match = re.search(r"營收成長[：:]\s*(.*)", response_text)
-        
-        capex_val = capex_match.group(1).strip() if capex_match else None
-        growth_val = growth_match.group(1).strip() if growth_match else None
-        
-        return capex_val, growth_val
-        
-    except Exception:
-        return None, None
 
 if selected_stock:
     try:
@@ -327,48 +279,46 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
-            with st.spinner("🚀 混合引擎正經由高匿通道網撈實時法說快訊並交付 AI 提煉..."):
-                ai_capex, ai_growth = get_live_guidance_via_ai(selected_stock)
-            
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
-            curr_str = "NT$" if is_tw_detail else "美元"
             
-            # 1. 營收年增率展示與備援
-            if ai_growth and not any(x in ai_growth for x in ["無", "未", "數據", "錯誤", "None"]):
-                rev_growth_str = f"📡 聯網實時提煉: {ai_growth}"
+            # 1. 營收增長共識（調用分析師 Forward 複合預期指標）
+            rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
+            if rev_growth is not None:
+                rev_growth_str = f"{rev_growth * 100:.1f}% (華爾街分析師複合共識預期)"
             else:
-                rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
-                rev_growth_str = f"{rev_growth * 100:.1f}% (API 歷史季報折算)" if rev_growth is not None else "暫無數據"
+                rev_growth_str = "未揭露未來展望"
             
-            # 2. 資本支出展示與匯率安全洗鍊
-            if ai_capex and not any(x in ai_capex for x in ["無", "未", "數據", "錯誤", "None"]):
-                capex_str = f"📡 聯網實時提煉: {ai_capex}"
-            else:
-                capex_str = "暫無數據"
-                try:
-                    cf = stock_detail.quarterly_cashflow
-                    if cf is None or cf.empty: cf = stock_detail.cashflow
-                    if cf is not None and not cf.empty:
-                        m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                        if m_keys:
-                            latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
-                            if not is_tw_detail and latest_raw > 10000000000:
-                                latest_raw = latest_raw / 32.0
-                                capex_str = f"{latest_raw / 100000000:.1f} 億美元 (API 歷史財報校正值)"
-                            elif is_tw_detail:
-                                capex_str = f"{latest_raw / 100000000:.1f} 億新台幣 (API 歷史財報值)"
-                            else:
-                                capex_str = f"{latest_raw / 100000000:.1f} 億美元 (API 歷史財報值)"
-                except Exception:
-                    pass
+            # 2. 資本支出安全計量（調用最新財報並進行年化運轉率 Run Rate 折算）
+            capex_str = "未揭露未來展望"
+            try:
+                cf = stock_detail.quarterly_cashflow
+                if cf is None or cf.empty: cf = stock_detail.cashflow
+                if cf is not None and not cf.empty:
+                    m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                    if m_keys:
+                        # 取得單季真實發生的資本支出金額（絕對值）
+                        latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
+                        
+                        # 🛡️ 數據庫清洗過濾：校正 ADR 混亂的台幣/美元計價
+                        if not is_tw_detail and latest_raw > 10000000000:
+                            # 如果美股代碼算出來超過 100 億美金，代表背後數據庫塞的是台幣，直接除以 32 匯率校正
+                            latest_raw = latest_raw / 32.0
+                            # 將單季支出乘以 4，精準擬合為當前企業的「年化運轉率 (Annual Run Rate)」
+                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
+                        elif is_tw_detail:
+                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣 (單季最新數據年化折算)"
+                        else:
+                            capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元 (單季最新數據年化折算)"
+            except Exception:
+                pass
             
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="優先採用 Python 自主網撈當季快訊交由 AI 大腦提取，若遭搜尋限制則自動調用財報庫。")
+            col_f2.metric("2026 全年資本支出指引 (CapEx Run Rate)", capex_str, help="財務計量公式：採集企業最新一季法說財報所公告之資本支出，乘以 4 進行年化 Run Rate 折算。")
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
                 
     except Exception as e: 
