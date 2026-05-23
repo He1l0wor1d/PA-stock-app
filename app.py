@@ -292,43 +292,102 @@ if summary_data:
 
 st.markdown("---")
 
-import streamlit as st
-import yfinance as yf
+# ==============================================================================
+# 🔍 個股動態決策軌道與核心基本面 (AI 聯網智慧撈取免維護版 - 免費方案)
+# ==============================================================================
+st.header("🔍 個股動態決策軌道與核心基本面")
 import json
-import google.generativeai as genai  # 或是使用 openai 庫
+
+# 自動計算預設個股位置
+sorted_tickers = sorted(active_tickers)
+default_index = sorted_tickers.index("TSM") if "TSM" in sorted_tickers else 0
+
+selected_stock = st.selectbox(
+    "選擇個股查看決策軌道：", 
+    options=sorted_tickers, 
+    index=default_index
+)
 
 def get_live_guidance_via_ai(stock_code):
     """
-    利用 AI 的聯網能力，直接吐出結構化的最新法說會指引，完全解決爬蟲被擋與正則失效的問題
+    透過 AI 的聯網功能，直接從最新新聞與法說會資料中抓取 2026 預期數值
     """
     try:
-        # 這裡配置你的 AI 聯網 Prompt
+        import google.generativeai as genai
+        
+        # 1. 自動從 st.secrets 讀取剛剛在後台設定的金鑰
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        
+        # 2. 使用免費額度最高的 gemini-1.5-flash 模型 (每分鐘可免費呼叫 15 次)
+        # 並開啟 google_search 聯網工具，讓 AI 具備即時查新聞的能力
+        model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            tools=[{"google_search": {}}]
+        )
+        
         prompt = f"""
-        請搜尋網路公開資料，查詢股票代碼 {stock_code} 最新法說會公布的 2026 全年資本支出指引（CapEx Guidance）與 2026 全年營收年增率預期（YoY Revenue Growth Guidance）。
-        請嚴格以 JSON 格式回傳，不要包含任何 Markdown 標記，格式如下：
+        請即時搜尋網路，查詢股票代碼 {stock_code} 最新法說會或官方公布的「2026 全年資本支出指引 (CapEx Guidance)」與「2026 全年營收年增率預期 (YoY Revenue Growth)」。
+        請嚴格以 JSON 格式回傳，不要包含 ```json 等任何 Markdown 標記，格式必須完全如下：
         {{
-            "capex": "最新資本支出數據與貨幣單位",
-            "growth": "最新營收成長預期百分比"
+            "capex": "最新指引數字 (含單位與法說會日期摘要)",
+            "growth": "最新營收年增率百分比預期"
         }}
         """
         
-        # 呼叫支援聯網/搜尋的 AI 模型 (範例)
-        model = genai.GenerativeModel('gemini-1.5-pro')
-        response = model.generate_content(prompt) # 需開啟聯網 tools
+        response = model.generate_content(prompt)
         
+        # 解析 AI 回傳的乾淨 JSON
         data = json.loads(response.text.strip())
-        return data.get("capex"), data.get("growth")
-    except Exception:
-        return "無數據", "無數據"
+        return data.get("capex", "無數據"), data.get("growth", "無數據")
+    except Exception as e:
+        # 如果金鑰沒設好或超過免費額度，回傳提示
+        return f"暫無數據 (請檢查 Secrets 設定)", "暫無數據"
 
-# ---- 在 Streamlit 面板渲染時 ----
 if selected_stock:
-    # 讓 AI 幫你全自動網撈最新的 2026 指引，免去寫正則表達式和維護爬蟲的痛苦
-    capex_str, rev_growth_str = get_live_guidance_via_ai(selected_stock)
-    
-    col_f1, col_f2 = st.columns(2)
-    col_f1.metric("2026 營收年增率預期 (YoY)", rev_growth_str)
-    col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str)
+    try:
+        stock_detail = yf.Ticker(selected_stock)
+        df_detail = stock_detail.history(start=start_date)
+        
+        if not df_detail.empty and len(df_detail) > 200:
+            # 繪製 K 線軌道圖
+            df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
+            df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
+            
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2.5)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=3)))
+            fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # --- 核心 AI 聯網數據層 ---
+            with st.spinner("🚀 AI 正在聯網查閱最新法說會與財報指引..."):
+                capex_str, rev_growth_str = get_live_guidance_via_ai(selected_stock)
+            
+            # 撈取即時估值 (PE)
+            info = stock_detail.info if stock_detail.info else {}
+            pe_ratio = info.get('trailingPE') or info.get('forwardPE')
+            pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
+            
+            # --- 前端面板渲染 ---
+            col_f1, col_f2, col_f3 = st.columns(3)
+            col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
+            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="AI 即時聯網查閱官方最新 Forward Guidance 指引，完全免人工維護")
+            col_f3.metric("實時估值 (PE Ratio)", pe_str)
+            
+            # 自動化行事曆
+            st.markdown("##### 📅 該個股最新官方公告之行事曆與預期")
+            try:
+                calendar = stock_detail.calendar
+                if calendar is not None and not calendar.empty:
+                    st.dataframe(calendar, use_container_width=True)
+                else:
+                    st.caption("💡 該標的近期官方暫無更新法說行事曆數據。")
+            except Exception:
+                st.caption("💡 暫時無法取得該股行事曆數據，請依官方公告為準。")
+                
+    except Exception as e: 
+        st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
 # ⏳ 策略回測績效驗證 (Scan-Forward 尋找首個買點機制)
