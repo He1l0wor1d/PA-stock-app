@@ -334,25 +334,38 @@ if selected_stock:
             curr_str = "NT$" if is_tw_detail else "美元"
             capex_str = "無數據"
 
-            # 嘗試計算 2026 全年（滾動四季）資本支出
-            try:
-                cf_q = stock_detail.quarterly_cashflow
-                if cf_q is not None and not cf_q.empty:
-                    # 尋找包含 Capital Expenditure 的欄位
-                    matching_keys = [k for k in cf_q.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                    if matching_keys:
-                        # 抓取最近 4 季數據並加總，推估為 2026 全年總額
-                        annual_capex = cf_q.loc[matching_keys[0]].dropna().head(4).sum()
-                        if annual_capex != 0:
-                            capex_str = f"{abs(annual_capex) / 100000000:.1f} 億{curr_str}"
-                
-                # 如果季報抓不到，降級使用 info 裡的年度欄位
-                if capex_str == "無數據":
+            # ==================================================================
+            # 🎯 新增：2026 全年資本支出精準覆蓋機制（優先使用最新官方/新聞公告實際值）
+            # ==================================================================
+            # 乾淨的代碼對照表，未來有最新權值股數據可直接在下方手動更新
+            OFFICIAL_2026_CAPEX = {
+                "2330.TW": "520 ~ 560 億美元 (官方指引)",
+                "TSM": "520 ~ 560 億美元 (官方指引)",
+                # 您可以在此處繼續加入其他核心股的 2026 最新指引，例如：
+                # "NVDA": "XXX 億美元", 
+            }
+
+            clean_ticker = selected_stock.strip().upper()
+            if clean_ticker in OFFICIAL_2026_CAPEX:
+                capex_str = OFFICIAL_2026_CAPEX[clean_ticker]
+            else:
+                # 【降級方案 A】嘗試從 yfinance 獲取華爾街最新的年度資本支出預估共識
+                try:
                     info_capex = info.get('capitalExpenditure')
                     if info_capex and pd.notna(info_capex):
                         capex_str = f"{abs(info_capex) / 100000000:.1f} 億{curr_str}"
-            except Exception:
-                capex_str = "無數據"
+                    else:
+                        # 【降級方案 B】若 info 沒有，則抓取歷史季報並加總最近 4 季
+                        cf_q = stock_detail.quarterly_cashflow
+                        if cf_q is not None and not cf_q.empty:
+                            matching_keys = [k for k in cf_q.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
+                            if matching_keys:
+                                annual_capex = cf_q.loc[matching_keys[0]].dropna().head(4).sum()
+                                if annual_capex != 0:
+                                    capex_str = f"{abs(annual_capex) / 100000000:.1f} 億{curr_str}"
+                except Exception:
+                    capex_str = "無數據"
+            # ==================================================================
                 
             pe_ratio = info.get('trailingPE') or info.get('forwardPE')
             pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
