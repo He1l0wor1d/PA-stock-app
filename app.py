@@ -309,17 +309,13 @@ selected_stock = st.selectbox(
 )
 
 def get_live_guidance_via_ai(stock_code):
-    """
-    透過 AI 的聯網功能，直接從最新新聞與法說會資料中抓取 2026 預期數值
-    """
     try:
         import google.generativeai as genai
         
-        # 1. 自動從 st.secrets 讀取剛剛在後台設定的金鑰
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # 暫時直接寫入金鑰（測試用，成功跳出數據後，建議還是換回 st.secrets 以策安全）
+        genai.configure(api_key="AIzaSyBMDLJCHCwHCZn-_8yOK3XUgTRFTiBNwHI")
         
-        # 2. 使用免費額度最高的 gemini-1.5-flash 模型 (每分鐘可免費呼叫 15 次)
-        # 並開啟 google_search 聯網工具，讓 AI 具備即時查新聞的能力
+        # 下方維持原樣...
         model = genai.GenerativeModel(
             model_name='gemini-1.5-flash',
             tools=[{"google_search": {}}]
