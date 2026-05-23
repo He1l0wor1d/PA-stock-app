@@ -48,7 +48,7 @@ with macro_col3:
     st.dataframe(calendar_df, use_container_width=True, hide_index=True)
 
 # ==============================================================================
-# 📖 ✨ 更新版：精簡化實戰使用指南
+# 📖 ✨ 精簡化實戰使用指南
 # ==============================================================================
 with st.expander("📖 系統實戰使用指南", expanded=False):
     st.markdown("""
