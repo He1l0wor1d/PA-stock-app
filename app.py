@@ -105,7 +105,6 @@ st.markdown("---")
 # 4. 內建核心產業與供應鏈地圖 (嚴格群組分類，不超10字，無英文無台股)
 # ==============================================================================
 INITIAL_SECTOR_MAP = {
-    
     # 晶圓代工製程
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
@@ -334,13 +333,8 @@ if selected_stock:
             curr_str = "NT$" if is_tw_detail else "美元"
             capex_str = "無數據"
 
-            # 判斷是否為台股
-            is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
-            curr_str = "NT$" if is_tw_detail else "美元"
-            capex_str = "無數據"
-
             # ==================================================================
-            # 🔄 升級：完全自動化動態共識與歷史年化交互推估機制
+            # 🔄 自動化共識與歷史年化交互推估機制 (結構與語法錯誤已修復)
             # ==================================================================
             try:
                 # 1. 優先嘗試計算前瞻四季（TTM）資本支出
@@ -357,17 +351,20 @@ if selected_stock:
                             has_history_capex = True
 
                 clean_ticker = selected_stock.strip().upper()
-
-                elif:
+                
+                # 特殊權值股自動對齊最新法說會大幅成長指引
+                if "2330.TW" in clean_ticker or "TSM" in clean_ticker:
+                    capex_str = "520億 ~ 560億 美元 (官方指引)"
+                else:
                     # 2. 其他個股：自動比對 yfinance 的前瞻預估與歷史滾動加總
                     info_capex = info.get('capitalExpenditure')
                     
                     if info_capex and pd.notna(info_capex) and abs(info_capex) > calculated_capex:
-                        # 說明華爾街已經在 info 裡更新了前瞻預估的資本支出 (通常大於歷史值)
                         capex_str = f"{abs(info_capex) / 100000000:.1f} 億{curr_str} (市場共識預估)"
                     elif has_history_capex:
-                        # 降級採用最近 4 季累計，並備註為年化累積值
                         capex_str = f"{calculated_capex / 100000000:.1f} 億{curr_str} (近4季滾動累計)"
+                    else:
+                        capex_str = "無數據"
                         
             except Exception:
                 capex_str = "無數據"
