@@ -253,7 +253,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (通用 AI 聯網 + Yahoo Finance 雙軌純自動版)
+# 🔍 個股動態決策軌道與核心基本面 (高智能 AI 語意 + 歷史財報安全洗鍊版)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 
@@ -276,13 +276,13 @@ def get_live_guidance_via_ai(stock_code):
         )
         
         prompt = f"""
-        請即時搜尋網路最新財經新聞與官方公告，查詢股票代碼 {stock_code} 最新法說會公布的：
+        請即時搜尋網路最新財經新聞、華爾街分析師共識與官方公告，查詢股票代碼 {stock_code} 最新公布的：
         1. 2026 全年資本支出指引 (CapEx Guidance)
         2. 2026 全年營收年增率預期 (YoY Revenue Growth)
         
-        請直接分兩行回答我，格式如下，不要包含任何 Markdown 標籤：
-        資本支出：[在此處填寫數據與單位]
-        營收成長：[在此處填寫數據與單位]
+        請直接分兩行回答我，格式如下，不要包含任何 Markdown 標籤或星號：
+        資本支出：[在此處填寫數據與單位，例如: 520億 ~ 560億美元]
+        營收成長：[在此處填寫數據與單位，例如: 大於 30%]
         """
         
         response = model.generate_content(prompt)
@@ -315,24 +315,22 @@ if selected_stock:
             fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=400, template="plotly_white")
             st.plotly_chart(fig, use_container_width=True)
             
-            # 🚀 雙軌備援引擎：優先交給 AI 聯網抓取
             with st.spinner("🚀 AI 正在聯網查閱最新官方指引展望..."):
                 ai_capex, ai_growth = get_live_guidance_via_ai(selected_stock)
             
             info = stock_detail.info if stock_detail.info else {}
             is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
-            curr_str = "NT$" if is_tw_detail else "美元"
             
             # 1. 處理營收年增率預期欄位 (AI ➔ Yahoo Finance Backup)
             if ai_growth and not any(x in ai_growth for x in ["無", "未", "數據", "錯誤"]):
-                rev_growth_str = f"📡 聯網最新預期: {ai_growth}"
+                rev_growth_str = f"📡 聯網最新指引: {ai_growth}"
             else:
                 rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth')
                 rev_growth_str = f"{rev_growth * 100:.1f}% (API 歷史財報)" if rev_growth is not None else "暫無數據"
             
-            # 2. 處理資本支出指引欄位 (AI ➔ Yahoo Finance Backup)
+            # 2. 處理資本支出指引欄位 (AI ➔ Yahoo Finance 歷史財報安全洗鍊層)
             if ai_capex and not any(x in ai_capex for x in ["無", "未", "數據", "錯誤"]):
-                capex_str = f"📡 聯網最新預期: {ai_capex}"
+                capex_str = f"📡 聯網最新指引: {ai_capex}"
             else:
                 capex_str = "暫無數據"
                 try:
@@ -341,9 +339,16 @@ if selected_stock:
                     if cf is not None and not cf.empty:
                         m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
                         if m_keys:
-                            latest_raw = cf.loc[m_keys[0]].dropna().iloc[0]
-                            if pd.notna(latest_raw) and latest_raw != 0:
-                                capex_str = f"{abs(latest_raw) / 100000000:.1f} 億{curr_str} (API 歷史已發生值)"
+                            latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
+                            
+                            # 🛡️ 萬用安全洗鍊：如果美股/ADR 出現大於 1000 億這種明顯是台幣錯置的驚人數字，自動除以匯率 (以 32 估算) 換算回美元
+                            if not is_tw_detail and latest_raw > 10000000000:
+                                latest_raw = latest_raw / 32.0
+                                capex_str = f"{latest_raw / 100000000:.1f} 億美元 (API 歷史季報-幣別校正值)"
+                            elif is_tw_detail:
+                                capex_str = f"{latest_raw / 100000000:.1f} 億新台幣 (API 歷史已發生值)"
+                            else:
+                                capex_str = f"{latest_raw / 100000000:.1f} 億美元 (API 歷史已發生值)"
                 except Exception:
                     pass
             
@@ -352,7 +357,7 @@ if selected_stock:
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="系統自動啟用雙軌引擎：優先採集 AI 即時網絡檢索，未果則自動向 Yahoo Finance API 資料庫調用歷史財報折算。")
+            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str, help="AI 即時網絡檢索，若搜尋引擎阻擋則自動向財報庫調用歷史財報並啟動幣別安全校正。")
             col_f3.metric("實時估值 (PE Ratio)", pe_str)
                 
     except Exception as e: 
