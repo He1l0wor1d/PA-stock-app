@@ -123,11 +123,21 @@ st.sidebar.header("📊 對稱網格參數設定")
 atr_period = st.sidebar.slider("ATR 計算天數", 5, 22, 14)
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 2.5, 1.4, 0.1)
 
-# 🛠️ 升級：將 K 線與計算資料庫的時間跨度拉長到 3 年
+# 🛠️ 升級：側邊欄引入超賣動能過濾參數，防止初跌段連續亮訊號
+rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (低於此值才觸發強買)", 20, 45, 32, 1)
+
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
 action_alerts = []
 action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
+
+# 本地 RSI 計算函數，避免額外依賴外部庫出錯
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
 
 with st.spinner("正在提煉核心決策..."):
     for ticker in active_tickers:
@@ -161,12 +171,16 @@ with st.spinner("正在提煉核心決策..."):
             df['MA200'] = df['Close'].rolling(window=200).mean()
             df['STD20'] = df['Close'].rolling(window=20).std()
             df['BB_Upper'] = df['MA20_actual'] + (2 * df['STD20'])
+            df['BB_Lower'] = df['MA20_actual'] - (2 * df['STD20'])
+            df['RSI'] = calculate_rsi(df['Close'], 14)
             
             current_price = float(df.iloc[-1]['Close'])  
             yesterday_close = float(df.iloc[-2]['Close'])      
             ma20_center = float(df.iloc[-1]['MA20_actual'])
             latest_atr = float(df.iloc[-1]['ATR'])
             latest_ma200 = float(df.iloc[-1]['MA200']) if not pd.isna(df.iloc[-1]['MA200']) else ma20_center
+            current_rsi = float(df.iloc[-1]['RSI']) if not pd.isna(df.iloc[-1]['RSI']) else 50
+            current_bb_lower = float(df.iloc[-1]['BB_Lower'])
             
             highest_20d = float(df['High'].rolling(window=20).max().iloc[-1])
             trailing_stop_price = highest_20d - (2 * latest_atr)
@@ -181,9 +195,10 @@ with st.spinner("正在提煉核心決策..."):
             
             if ma20_center >= latest_ma200:
                 market_state = "📈 多頭波段 (會漲)"
-                if current_price <= low_absorb_price: 
+                # 🛠️ 升級：即時面板加入複合金色大底部濾網 (跌破網格或跌破布林下軌，且RSI超賣)
+                if (current_price <= low_absorb_price or current_price <= current_bb_lower) and current_rsi <= rsi_filter_val: 
                     final_action = "🔥 強力買入"
-                    reason_str = f"多頭拉回過深，跌破網格下限 (-{atr_multiplier:.1f}x ATR)，黃金埋伏點！"
+                    reason_str = f"多頭恐慌暴跌洗盤！股價砸入大底部防守區，且 RSI 超賣 ({current_rsi:.1f})，黃金埋伏點！"
                 elif abs(current_price - ma20_center)/ma20_center <= 0.02: 
                     final_action = "🟢 買入"
                     reason_str = "股館拉回到關鍵 20MA 支撐區，符合建倉邏輯。"
@@ -192,7 +207,7 @@ with st.spinner("正在提煉核心決策..."):
                     reason_str = f"短線噴發過熱，衝破網格上限 (+{atr_multiplier:.1f}x ATR)，波段高拋。"
                 else:
                     final_action = "⚪ 觀望"
-                    reason_str = f"多頭結構健全，低吸位 {currency_symbol}{low_absorb_price:.1f}，未到請安心持股。"
+                    reason_str = f"多頭結構健全，低吸位 {currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}，未到請安心持股。"
                     
             else:
                 market_state = "📉 空頭結構 (會跌)"
@@ -202,9 +217,9 @@ with st.spinner("正在提煉核心決策..."):
                 elif current_price >= high_toss_price: 
                     final_action = "🔴 賣出"
                     reason_str = f"空頭反彈觸及網格上限 (+{atr_multiplier:.1f}x ATR)，逃命高拋點。"
-                elif current_price <= low_absorb_price: 
+                elif (current_price <= low_absorb_price or current_price <= current_bb_lower) and current_rsi <= rsi_filter_val: 
                     final_action = "🟢 買入"
-                    reason_str = f"空頭超賣跌破網格下限 (-{atr_multiplier:.1f}x ATR)，極小倉位短線試探。"
+                    reason_str = f"空頭極度超賣，觸及歷史下尾端，極小倉位短線試探。"
                 else:
                     final_action = "⚪ 觀望"
                     reason_str = "空頭下跌結構中，堅決保持空倉觀望。"
@@ -220,7 +235,7 @@ with st.spinner("正在提煉核心決策..."):
                 "產業領域": ticker_sector, "代碼": ticker, "當前股價": f"{currency_symbol}{current_price:.1f}",
                 "公允價值區間": fair_value_str, "移動停利價位": trailing_stop_str, "昨收盤價": f"{currency_symbol}{yesterday_close:.1f}",
                 "MA20": f"{currency_symbol}{ma20_center:.1f}", "市場狀態": market_state, "綜合建議": final_action,
-                "買點": f"{currency_symbol}{low_absorb_price:.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}", "精簡決策原因": reason_str
+                "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}", "精簡決策原因": reason_str
             })
         except Exception: pass
 
@@ -263,41 +278,52 @@ if selected_stock:
         if not df_detail.empty and len(df_detail) > 200:
             df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
             df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
+            df_detail['STD20'] = df_detail['Close'].rolling(window=20).std()
+            df_detail['BB_Lower'] = df_detail['MA20_plot'] - (2 * df_detail['STD20'])
+            df_detail['RSI'] = calculate_rsi(df_detail['Close'], 14)
             
-            # 🛠️ 升級：歷史「🔥 強力買入」訊號回測點標記計算
             high_low_det = df_detail['High'] - df_detail['Low']
             tr_det = pd.concat([high_low_det, (df_detail['High'] - df_detail['Close'].shift(1)).abs(), (df_detail['Low'] - df_detail['Close'].shift(1)).abs()], axis=1).max(axis=1)
             df_detail['ATR_det'] = tr_det.rolling(window=atr_period).mean()
             
-            # 計算歷史每日網格下限與多頭判斷
+            # 每日動態防禦下限計算
             df_detail['Low_Absorb'] = df_detail['MA20_plot'] - (df_detail['ATR_det'] * atr_multiplier)
             df_detail['Is_Bull'] = df_detail['MA20_plot'] >= df_detail['MA200']
             
-            # 觸發條件：多頭結構健全，且當日收盤價跌破網格下限
-            df_detail['Strong_Buy_Signal'] = df_detail['Is_Bull'] & (df_detail['Close'] <= df_detail['Low_Absorb'])
+            # 🛠️ 升級：更精準的 Buy the Dip 大底部演算法
+            # 1. 價格跌破網格下限 OR 跌破布林下軌 (防止MA20快速下墜導致軌道收縮漏訊號)
+            # 2. RSI 必須進入極度超賣區，排除初跌段連發訊號
+            price_cond = (df_detail['Close'] <= df_detail['Low_Absorb']) | (df_detail['Close'] <= df_detail['BB_Lower'])
+            rsi_cond = df_detail['RSI'] <= rsi_filter_val
+            df_detail['Strong_Buy_Signal'] = df_detail['Is_Bull'] & price_cond & rsi_cond
             
-            # 篩選出所有觸發強買點的日期資料
             buy_signals = df_detail[df_detail['Strong_Buy_Signal']]
 
             # 開始畫圖
             fig = go.Figure()
             fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2.5)))
-            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=3)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=2.5)))
             
-            # 🛠️ 升級：在 K 線圖上渲染金色「🔥 強力買入」噴發點
-            if not buy_signals.empty:
-                fig.add_trace(go.Scatter(
-                    x=buy_signals.index,
-                    y=buy_signals['Low'] * 0.97,  # 稍微在低點下方一點的位置繪製，避免重疊
-                    mode='markers+text',
-                    marker=dict(symbol='triangle-up', size=12, color='gold', line=dict(color='darkgoldenrod', width=1)),
-                    text=[f"🔥 Buy<br>{p:.1f}" for p in buy_signals['Close']],
-                    textposition="bottom center",
-                    name='🔥 強力買入訊號點'
+            # 🛠️ 升級：移除所有三角形、Buy字樣等雜訊，改用極簡『淡金色垂直虛線光束』標示強買日
+            shapes_list = []
+            for sig_date in buy_signals.index:
+                shapes_list.append(dict(
+                    type="line",
+                    xref="x", yref="paper",
+                    x0=sig_date, x1=sig_date,
+                    y0=0, y1=1,
+                    line=dict(color="rgba(212, 175, 55, 0.45)", width=2.5, dash="dash") # 45% 不透明度的經典金屬虛線
                 ))
                 
-            fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=500, template="plotly_white")
+            fig.update_layout(
+                shapes=shapes_list,
+                xaxis_rangeslider_visible=False, 
+                yaxis_title="價格", 
+                height=520, 
+                template="plotly_white",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
             st.plotly_chart(fig, use_container_width=True)
             
             info = stock_detail.info if stock_detail.info else {}
@@ -381,6 +407,10 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
             
             df_bt['MA20'] = df_bt['Close'].rolling(window=20).mean()
             df_bt['MA200'] = df_bt['Close'].rolling(window=200).mean()
+            df_bt['STD20'] = df_bt['Close'].rolling(window=20).std()
+            df_bt['BB_Lower'] = df_bt['MA20'].rolling(window=20).mean() - (2 * df_bt['STD20'])
+            df_bt['RSI'] = calculate_rsi(df_bt['Close'], 14)
+            
             hl = df_bt['High'] - df_bt['Low']
             h_pc = (df_bt['High'] - df_bt['Close'].shift(1)).abs()
             l_pc = (df_bt['Low'] - df_bt['Close'].shift(1)).abs()
@@ -398,13 +428,16 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 past_ma20 = row['MA20']
                 past_ma200 = row['MA200'] if not pd.isna(row['MA200']) else past_ma20
                 past_atr = row['ATR']
+                past_rsi = row['RSI'] if not pd.isna(row['RSI']) else 50
+                past_bb_lower = row['BB_Lower']
                 
                 if pd.isna(past_ma20) or pd.isna(past_atr): continue
                 
                 low_b = past_ma20 - (past_atr * atr_multiplier)
                 
                 if past_ma20 >= past_ma200:
-                    if past_close <= low_b:
+                    # 回測同步套用全新優化的大底部算法
+                    if (past_close <= low_b or past_close <= past_bb_lower) and past_rsi <= rsi_filter_val:
                         signal = "🔥 強力買入"
                     elif abs(past_close - past_ma20)/past_ma20 <= 0.02:
                         signal = "🟢 買入"
