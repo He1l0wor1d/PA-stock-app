@@ -297,12 +297,6 @@ def get_live_guidance_via_ai(stock_code):
         growth_val = growth_match.group(1).strip() if growth_match else None
         
        
-        
-    except Exception as e:
-        # 防禦降級：若徹底斷網或金鑰過載，針對台積電給予最新法說共識值，其餘則呈現簡短錯誤
-        if stock_code in ["TSM", "2330.TW"]:
-            return "520億 ~ 560億美元 (趨近高標)", "大於 30% (法說會最新指引)"
-        return f"暫無數據", "暫無數據"
 
 if selected_stock:
     try:
