@@ -331,7 +331,7 @@ if selected_stock:
             rev_growth_str = f"{rev_growth * 100:.1f}%" if rev_growth is not None else "無數據"
                 
 # 統一幣別標示（依照你的要求單位為億美元，若台股則自動換算或標示）
-is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
+is_tw_detail = ".TW" in selected_stock or ".TW" in selected_stock
 curr_str = "NT$" if is_tw_detail else "美元"
 
 capex_str = "無數據"
@@ -359,7 +359,7 @@ except Exception:
             
             col_f1, col_f2, col_f3 = st.columns(3)
             col_f1.metric("營收年增率 (YoY)", rev_growth_str)
-           col_f2.metric("2026 全年資本支出", capex_str, help="反映企業 2026 全年對 AI 算力基礎設施與廠房的投入總力道")
+            col_f2.metric("2026 全年資本支出", capex_str, help="反映企業 2026 全年對 AI 算力基礎設施與廠房的投入總力道")
             col_f3.metric("當前估值 (PE Ratio)", pe_str)
                 
     except Exception as e: st.error(f"分析載入失敗: {e}")
