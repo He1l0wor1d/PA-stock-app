@@ -316,7 +316,6 @@ def get_live_guidance_via_ai(stock_code):
     try:
         import google.generativeai as genai
         import json
-        import re
         
         # 1. 確保金鑰正確帶入
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -342,13 +341,17 @@ def get_live_guidance_via_ai(stock_code):
         response = model.generate_content(prompt)
         response_text = response.text.strip()
         
-        # 4. 強效防禦層：徹底清除可能干擾 JSON 解析的 Markdown 標籤 (完整修復語法)
-        response_text = re.sub(r'
-http://googleusercontent.com/immersive_entry_chip/0
-
-### 🛠️ 這次修正了什麼？
-這次把第 40 行的 `response_text = re.sub(r'
-http://googleusercontent.com/immersive_entry_chip/1
+        # 4. 強效防禦層：改用簡單的 replace 剝殼，徹底避開 re.sub 的字串截斷語法錯誤
+        response_text = response_text.replace("```json", "").replace("```", "").strip()
+        
+        # 5. 解析 JSON
+        data = json.loads(response_text)
+        return data.get("capex", "無數據"), data.get("growth", "無數據")
+        
+    except Exception as e:
+        # 如果發生解析或連線錯誤，在 Metric 上呈現，方便一眼看出問題
+        return f"暫無數據 (錯誤: {str(e)[:20]})", "暫無數據"
+        
 
 if selected_stock:
     try:
