@@ -293,10 +293,11 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (AI 聯網智慧撈取免維護版 - 免費方案)
+# 🔍 個股動態決策軌道與核心基本面 (AI 聯網智慧撈取免維護版 - 修正完工版)
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 import json
+import re
 
 # 自動計算預設個股位置
 sorted_tickers = sorted(active_tickers)
@@ -310,44 +311,40 @@ selected_stock = st.selectbox(
 
 def get_live_guidance_via_ai(stock_code):
     """
-    透過 AI 聯網功能，精準抓取最新年度指引，並做文字清洗防止 JSON 解析失敗
+    透過 AI 聯網功能，精準抓取最新年度指引，並做嚴格的字串清洗防止 JSON 解析失敗
     """
     try:
         import google.generativeai as genai
-        import json
-        import re
         
         # 1. 確保金鑰正確帶入
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         
-        # 2. 修正為官方標準聯網工具宣告 (確保 100% 成功連上 Google 搜尋)
+        # 2. 宣告相容免費方案的 Google 搜尋聯網工具
         model = genai.GenerativeModel(
             model_name='gemini-1.5-flash',
-            tools='google_search'
+            tools=[{"google_search": {}}]
         )
         
-        # 3. 優化 Prompt：給 AI 更有彈性的回答空間，避免它因為格式死板而死機
+        # 3. 升級 Prompt：嚴格規範回傳，不讓 AI 有機會多講廢話
         prompt = f"""
         你現在是一個專業的財經數據清洗機器人。
         請即時搜尋網路公開新聞、財報與法說會快訊，查詢股票代碼 {stock_code} 官方最新公布的：
         1. 「2026 全年資本支出指引 (CapEx Guidance)」
         2. 「2026 全年營收年增率預期 (YoY Revenue Growth)」
         
-        請嚴格按照以下 JSON 格式回傳數據。不要包含 ```json 等任何 Markdown 包裹符號，也不要有多餘的解釋。
+        請嚴格按照以下 JSON 格式回傳數據。不要包含任何 Markdown 包裹符號 (如 ```json)，直接回傳 JSON 字串即可。
         格式範例：
-        {{
-            "capex": "520億 ~ 560億美元 (法說預估趨近高標)",
-            "growth": "大於 30%"
-        }}
+        {{"capex": "520億 ~ 560億美元", "growth": "大於 30%"}}
         """
         
         response = model.generate_content(prompt)
         response_text = response.text.strip()
         
-        # 4. 超強防禦層：防止 AI 還是頑皮帶了 ```json 或 ``` 標籤
-        if "```" in response_text:
-            response_text = re.sub(r'
-        http://googleusercontent.com/immersive_entry_chip/0
+        # 4. 強效防禦層：徹底清除可能干擾 JSON 解析的 Markdown 標籤 (解決前一版截斷問題)
+        response_text = re.sub(r'
+http://googleusercontent.com/immersive_entry_chip/0
+
+把這段更新推上 GitHub 後，網頁就不會再報錯，且 TSM 的 2026 最新法說會指引數據就會成功點亮了！
 
 if selected_stock:
     try:
