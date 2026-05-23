@@ -249,12 +249,12 @@ if selected_stock:
                         ax=0, ay=35, font=dict(color="white", size=9), bgcolor="green"
                     ))
                 # 軌道二：右側動能突破（突破20日新高 + RSI強勢區，排除熊市）
-                elif p_ma20 >= p_ma200 and p_close > p_high20 and 60 <= p_rsi <= 80:
-                    annotations.append(dict(
-                        x=date, y=row['High'], text="⚡動能", showarrow=True,
-                        arrowhead=2, arrowcolor="#d62728", arrowsize=1, arrowwidth=2,
-                        ax=0, ay=-35, font=dict(color="white", size=9), bgcolor="#ff7f0e"
-                    ))
+               # elif p_ma20 >= p_ma200 and p_close > p_high20 and 60 <= p_rsi <= 80:
+                   # annotations.append(dict(
+                      #  x=date, y=row['High'], text="⚡動能", showarrow=True,
+                       # arrowhead=2, arrowcolor="#d62728", arrowsize=1, arrowwidth=2,
+                       # ax=0, ay=-35, font=dict(color="white", size=9), bgcolor="#ff7f0e"
+                   # ))
 
             fig.update_layout(
                 xaxis_rangeslider_visible=False, yaxis_title="價格", height=500, 
