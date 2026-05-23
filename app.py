@@ -354,7 +354,7 @@ if selected_stock:
                 
                 # 特殊權值股自動對齊最新法說會大幅成長指引
                 if "2330.TW" in clean_ticker or "TSM" in clean_ticker:
-                    capex_str = "520億 ~ 560億 美元)"
+                    capex_str = "520億 ~ 560億"
                 else:
                     # 2. 其他個股：自動比對 yfinance 的前瞻預估與歷史滾動加總
                     info_capex = info.get('capitalExpenditure')
