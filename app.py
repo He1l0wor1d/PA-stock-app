@@ -75,7 +75,7 @@ INITIAL_SECTOR_MAP = {
     "ARKX": "航太太空國防", "NASA": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
     "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", 
     "ONDS": "航太太空國防", "FLY": "航太太空國防",
-    "XOM": "傳統能源礦产", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
+    "XOM": "傳統能源礦產", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
     "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技", "HROW": "生技醫療科技",
     "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
     "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理", "RKT": "金融資產管理",
@@ -104,8 +104,9 @@ st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天（精簡標
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, 1.4, 0.1)
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (預設32常態賣壓 / 25極端恐慌賣壓)", 15, 45, 32, 1)
 
-# 🛠️ 升級：新增「資金保護牆」冷卻滑桿，讓使用者自由控制一個區間重複亮燈的密集度
-cooldown_days = st.sidebar.slider("🛡️ 強力買入「時間冷卻鎖」天數 (防止密集亮燈打光資金)", 5, 40, 20, 1)
+# 🛠️ 時間視窗優化：冷卻保護鎖改為「同一個波段/一個月內」才限制，避免限制到長線幾年後的高位暴跌
+wave_window_days = st.sidebar.slider("🛡️ 空間排他時間視窗 (天) [在此天數內執行空間破底限制，超過則解鎖]", 10, 90, 30, 5)
+min_drop_pct = st.sidebar.slider("📉 視窗內二次強買必備「再跌幅門檻」", 2, 15, 5, 1)
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
@@ -164,7 +165,6 @@ with st.spinner("正在提煉核心決策..."):
             df['BB_Lower'] = df['MA20_actual'] - (2 * df['STD20'])
             df['RSI'] = calculate_rsi(df['Close'], 14)
             
-            # 🛠️ 核心稀疏化演算法：計算歷史完整的「冷卻與空間破底」強買訊號序列
             df['SPY_Close'] = spy_df_global['Close']
             df['SPY_MA200'] = spy_df_global['MA200']
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
@@ -174,10 +174,9 @@ with st.spinner("正在提煉核心決策..."):
             rsi_cond = df['RSI'] <= rsi_filter_val
             raw_panic_signal = rsi_cond & price_cond & (df['SPY_Safe'] | (df['MA20_actual'] >= df['MA200']))
             if use_market_filter:
-                # 如果全面開啟大盤風控，且大盤不安全，連個股維持多頭也嚴格封鎖
                 raw_panic_signal = raw_panic_signal & df['SPY_Safe']
             
-            # 滾動歷史計算稀疏強買點（加上冷卻期與空間價格過濾鎖）
+            # 🛠️ 升級版動態波段稀疏化演算法：引進動態時間視窗衰退鎖
             sparse_strong_buy = pd.Series(False, index=df.index)
             last_buy_date = None
             last_buy_price = None
@@ -189,15 +188,20 @@ with st.spinner("正在提煉核心決策..."):
                         last_buy_date = date
                         last_buy_price = df.loc[date, 'Close']
                     else:
-                        # 檢查時間冷卻鎖限制 (必須超過設定天數)
                         days_passed = (date - last_buy_date).days
-                        # 檢查空間破底限制 (價格必須比上一次亮燈還要更低，拒絕高位反覆震盪亮燈)
-                        price_is_lower = df.loc[date, 'Close'] < last_buy_price
                         
-                        if days_passed >= cooldown_days and price_is_lower:
+                        # 核心修復邏輯：如果已經跨出同一個下跌波段（例如大於30天），價格鎖失效，直接放行
+                        if days_passed > wave_window_days:
                             sparse_strong_buy[date] = True
                             last_buy_date = date
                             last_buy_price = df.loc[date, 'Close']
+                        else:
+                            # 如果在 30 天的同一個短線波段內，嚴格執行「收盤價必須比上一次亮燈再跌破 X%」的空間排他
+                            price_drop_target = last_buy_price * (1 - (min_drop_pct / 100))
+                            if df.loc[date, 'Close'] <= price_drop_target:
+                                sparse_strong_buy[date] = True
+                                last_buy_date = date
+                                last_buy_price = df.loc[date, 'Close']
 
             df['Sparse_Strong_Buy'] = sparse_strong_buy
             
@@ -262,7 +266,7 @@ st.header("🚨 今日促銷")
 if action_alerts:
     st.dataframe(pd.DataFrame(action_alerts), use_container_width=True, hide_index=True)
 else:
-    st.info("🧘 報告隊長：今日名單內皆無符合資金保護牆過濾限制的『強力買入』或『買入』特價標的。")
+    st.info("🧘 報告隊長：今日名單內皆無符合『動態波段濾網』限制的促銷標的。")
 
 st.markdown("---")
 
@@ -317,7 +321,7 @@ if selected_stock:
             if use_market_filter:
                 raw_panic_det = raw_panic_det & df_detail['SPY_Safe']
                 
-            # 核心圖表端同步套用稀疏化過濾演算法
+            # 圖表端同步套用動態時間視窗衰退鎖
             sparse_buy_det = pd.Series(False, index=df_detail.index)
             last_date_det = None
             last_price_det = None
@@ -330,11 +334,16 @@ if selected_stock:
                         last_price_det = df_detail.loc[date, 'Close']
                     else:
                         days_passed = (date - last_date_det).days
-                        price_is_lower = df_detail.loc[date, 'Close'] < last_price_det
-                        if days_passed >= cooldown_days and price_is_lower:
+                        if days_passed > wave_window_days:
                             sparse_buy_det[date] = True
                             last_date_det = date
                             last_price_det = df_detail.loc[date, 'Close']
+                        else:
+                            price_drop_target = last_price_det * (1 - (min_drop_pct / 100))
+                            if df_detail.loc[date, 'Close'] <= price_drop_target:
+                                sparse_buy_det[date] = True
+                                last_date_det = date
+                                last_price_det = df_detail.loc[date, 'Close']
 
             df_detail['Sparse_Strong_Buy'] = sparse_buy_det
             buy_signals = df_detail[df_detail['Sparse_Strong_Buy']]
@@ -353,7 +362,7 @@ if selected_stock:
                     text=['🔥' for _ in range(len(buy_signals))],
                     textposition="bottom center",
                     textfont=dict(size=18),
-                    name='🔥 強力買入點 (已啟用時間冷卻與空間破底鎖)'
+                    name='🔥 強力買入點'
                 ))
                 
             fig.update_layout(
@@ -463,12 +472,8 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
             latest_today_price = df_bt['Close'].iloc[-1]
             currency = "NT$ " if ".TW" in ticker else "$ "
 
-            # 🛠️ 回測核心同步計算：稀疏化的強買點歷史序列
             df_scan = df_scan.copy()
             df_scan['SPY_Close'] = df_spy_raw['Close']
-            
-            # 抓取大盤歷史均線做防護
-            spy_bt_part = spy_df_global.loc[df_scan.index[0]:]
             
             last_bt_date = None
             last_bt_price = None
@@ -493,12 +498,11 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 else:
                     is_market_safe_past = True
                 
-                # 計算未稀疏前的恐慌訊號
                 is_raw_strong_buy = (past_close <= low_b or past_close <= past_bb_lower) and past_rsi <= rsi_filter_val and (is_market_safe_past or (past_ma20 >= past_ma200))
                 if use_market_filter and not is_market_safe_past:
                     is_raw_strong_buy = False
                     
-                # 執行時間冷卻鎖與空間過濾
+                # 回測端同步套用升級版：跨波段解鎖機制
                 is_past_strong_buy = False
                 if is_raw_strong_buy:
                     if last_bt_date is None:
@@ -507,11 +511,16 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                         last_bt_price = past_close
                     else:
                         days_passed = (date - last_bt_date).days
-                        price_is_lower = past_close < last_bt_price
-                        if days_passed >= cooldown_days and price_is_lower:
+                        if days_passed > wave_window_days:
                             is_past_strong_buy = True
                             last_bt_date = date
                             last_bt_price = past_close
+                        else:
+                            price_drop_target = last_bt_price * (1 - (min_drop_pct / 100))
+                            if past_close <= price_drop_target:
+                                is_past_strong_buy = True
+                                last_bt_date = date
+                                last_bt_price = past_close
                 
                 is_past_normal_buy = abs(past_close - past_ma20) / past_ma20 <= 0.02
                 
