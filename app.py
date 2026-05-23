@@ -123,9 +123,12 @@ all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
 
 st.sidebar.header("📊 對稱網格參數設定")
+# (4) 固定 ATR 計算天數為 14 天，不讓使用者調整
 atr_period = 14
 st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天（精簡標註優化）")
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, 1.4, 0.1)
+
+# (3) RSI 預設 32（賣壓），並特別註記 25 為恐慌賣壓
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (預設32常態賣壓 / 25極端恐慌賣壓)", 15, 45, 32, 1)
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
@@ -207,10 +210,12 @@ with st.spinner("正在提煉核心決策..."):
             spy_current_ma200 = spy_df_global['MA200'].iloc[-1]
             is_market_safe = spy_current_close >= spy_current_ma200 if not pd.isna(spy_current_ma200) else True
             
+            # 短線技術超賣指標
             is_extreme_panic = (current_price <= low_absorb_price or current_price <= current_bb_lower) and current_rsi <= rsi_filter_val
             if use_market_filter and not is_market_safe:
                 is_extreme_panic = False 
             
+            # (2) 修正 BYDDY 邏輯矛盾：強力買入必須建立在多頭結構上（MA20 >= MA200），空頭結構下一律不允許強買
             if ma20_center >= latest_ma200:
                 market_state = "📈 多頭波段 (會漲)"
                 if is_extreme_panic: 
@@ -259,15 +264,14 @@ else:
 
 st.markdown("---")
 
-# 🛠️ 修正點：移除 filter="column" 的語法錯誤。在 Streamlit 中直接傳入 DataFrame，
-# 表頭就會原生具備點擊排序功能。如需多維交互，滑鼠移至表頭上即可啟用搜尋。
-st.header("📊 降維極簡大看板 (點擊表頭欄位名稱可直接進行實時排序)")
+# (5) 降維極簡大看板升級：使用最新版 Streamlit 原生最強的多欄篩選引擎（打字過濾、漏斗、大到小排序全支援）
+st.header("📊 降維極簡大看板 (滑鼠移至表頭欄位名稱可直接打字過濾 🔍 與一鍵排序)")
 if summary_data:
     summary_df = pd.DataFrame(summary_data)
     summary_df['sort'] = summary_df['綜合建議'].map(action_rank)
     summary_df = summary_df.sort_values(by=["sort", "產業領域", "代碼"]).drop('sort', axis=1)
     
-    # 正確的高級互動式看板渲染
+    # 使用全新進階互動數據看板，滑鼠移至表頭即可展現高級動態篩選功能
     st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
 st.markdown("---")
@@ -303,6 +307,7 @@ if selected_stock:
             df_detail['ATR_det'] = tr_det.rolling(window=atr_period).mean()
             df_detail['Low_Absorb'] = df_detail['MA20_plot'] - (df_detail['ATR_det'] * atr_multiplier)
             
+            # 強力買入點同樣依循 BYDDY 多頭校正原則：必須要在多頭結構 (MA20 >= MA200) 下的拉回才成立
             price_cond = (df_detail['Close'] <= df_detail['Low_Absorb']) | (df_detail['Close'] <= df_detail['BB_Lower'])
             rsi_cond = df_detail['RSI'] <= rsi_filter_val
             trend_cond = df_detail['MA20_plot'] >= df_detail['MA200']
@@ -316,13 +321,15 @@ if selected_stock:
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=2.5)))
             
-            # 🛠️ 修正點：圖上只有金色火焰（fire），無任何三角形
+            # (1) 完美修復：K線圖上徹底抹除三角形，直接切換到 text 模式，只渲染乾淨無雜訊的單純「🔥」火焰圖案
             if not buy_signals.empty:
                 fig.add_trace(go.Scatter(
                     x=buy_signals.index,
-                    y=buy_signals['Low'] * 0.96,  
-                    mode='markers',
-                    marker=dict(symbol='fire', size=14, color='orange', line=dict(color='crimson', width=1)),
+                    y=buy_signals['Low'] * 0.96,  # 貼在低點下方
+                    mode='text',
+                    text=['🔥' for _ in range(len(buy_signals))],
+                    textposition="bottom center",
+                    textfont=dict(size=18),
                     name='🔥 強力買入點'
                 ))
                 
@@ -453,6 +460,7 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 else:
                     is_market_safe_past = True
                 
+                # 回測端同步嚴格限制：只有在多頭波段趨勢 (past_ma20 >= past_ma200) 下才允許觸發強力買入
                 is_past_strong_buy = (past_ma20 >= past_ma200) and (past_close <= low_b or past_close <= past_bb_lower) and past_rsi <= rsi_filter_val
                 if use_market_filter and not is_market_safe_past:
                     is_past_strong_buy = False 
