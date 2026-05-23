@@ -394,27 +394,7 @@ if selected_stock:
             
             # 🚀 觸發動態網路爬蟲
             live_capex, live_growth, live_snippet = fetch_2026_guidance_live(selected_stock)
-            
-            # 針對 TSM / 2330.TW 進行更具體的自適應處理，避免新聞文字解析雜亂
-            if selected_stock in ["TSM", "2330.TW"]:
-                if live_capex:
-                    # 將爬到的英文格式漂亮美化
-                    clean_capex = live_capex.lower().replace("billion dollars", "B").replace("billion", "B")
-                    capex_str = f"📡 2026法說會指引: {clean_capex} (市場預期朝56B高標推進)"
-                else:
-                    # 如果爬蟲被擋，系統啟用防碎死機制，直接帶入 2026 最新官方共識數值
-                    capex_str = "📡 2026法說會指引: 52 - 56 Billion (歷史新高)"
-                
-                if live_growth:
-                    rev_growth_str = f"📡 最新指引: {live_growth}"
-                else:
-                    rev_growth_str = f"📡 最新指引: 全年美元營收上修，預估年增 > 30%"
-                
-                if live_snippet:
-                    insight_notes = f"【最新法說會快訊摘錄】: {live_snippet}"
-            
-            else:
-                # 3. 其他非 TSM 股票，依序採用爬蟲資料 ➔ 歷史財報 API 運算
+                # 依序採用爬蟲資料 ➔ 歷史財報 API 運算
                 if live_capex or live_growth:
                     capex_str = f"📡 爬蟲撈取預期: {live_capex}" if live_capex else "無法解析"
                     rev_growth_str = f"📡 爬蟲撈取預期: {live_growth}" if live_growth else "無法解析"
