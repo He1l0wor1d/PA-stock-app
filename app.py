@@ -50,30 +50,6 @@ with macro_col3:
 
 st.markdown("---")
 
-# ==============================================================================
-# ✨ 第三層：AGI 2027 敘事與 SALP (13F) 聰明錢觀測站
-# ==============================================================================
-st.markdown("### 🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站")
-salp_col1, salp_col2 = st.columns([1, 1.8])
-
-with salp_col1:
-    st.markdown("##### 🔋 AGI 算力進度與物理瓶頸預警")
-    st.metric(label="兆元美元集群投資進度", value="約 35%", delta="Capex 持續上修", delta_color="normal")
-    st.progress(0.35)
-    st.info("💡 **SALP 觀點**：AI 發展最大限制是「天然氣產量」與「變壓器交付」。AI 必須插電，電力層是未來硬資產。")
-
-with salp_col2:
-    st.markdown("##### 🏦 SALP 基金敘事層級持倉")
-    salp_data = {
-        "敘事層級": ["⚡ 電力層 (Power)", "☁️ AI 雲端 (AI Cloud)", "🌐 光通訊 (Photonics)", "🖥️ 運算層 (Compute)"],
-        "代表標的": ["BE, CEG, VST", "CRWV, CORZ, IREN", "GLW, COHR", "NVDA, SMH, TSM"],
-        "籌碼動向": ["📈 長期做多", "📈 持續加倉", "🔍 戰略佈局", "🛡️ 買入賣權避險"],
-        "內化視角": ["防禦力與剛需最強", "現金流紅利即刻落地", "解決數據傳輸延遲", "防範估值擁擠泡沫"]
-    }
-    st.dataframe(pd.DataFrame(salp_data), use_container_width=True, hide_index=True)
-
-st.markdown("---")
-
 # 全量股票資料庫初始化
 INITIAL_SECTOR_MAP = {
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
@@ -156,7 +132,6 @@ with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
         st.rerun()
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-# 🛠️ 核心修正：將預設值直接設為 all_current_tickers，保證全量股票一起加入運算與圖表
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
 
 st.sidebar.header("📊 對稱網格參數微調")
@@ -176,7 +151,6 @@ summary_data = []
 action_alerts = []
 action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
 
-# 本地 RSI 計算函數
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -196,7 +170,6 @@ with st.spinner("正在提煉核心決策..."):
     for ticker in active_tickers:
         try:
             ticker_sector = st.session_state.sector_map.get(ticker, "未分類")
-
             is_tw = ".TW" in ticker or ".TWO" in ticker
             currency_symbol = "NT$ " if is_tw else "$ "
             
@@ -218,7 +191,6 @@ with st.spinner("正在提煉核心決策..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
-            # 盤中最低價插針與技術超賣判定
             low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_multiplier)
             price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
             rsi_cond = df['RSI'] <= rsi_filter_val
@@ -226,7 +198,6 @@ with st.spinner("正在提煉核心決策..."):
             if use_market_filter:
                 raw_panic_signal = raw_panic_signal & df['SPY_Safe']
             
-            # 動態年線負乖離強制破鎖序列演算法
             sparse_strong_buy = pd.Series(False, index=df.index)
             last_buy_date = None
             last_buy_price = None
@@ -296,7 +267,7 @@ with st.spinner("正在提煉核心決策..."):
                 market_state = "📉 空頭結構 (會跌)"
                 if is_today_sparse_strong_buy:
                     final_action = "🔥 強力買入"
-                elif yesterday_close >= ma20_center Glen current_price < ma20_center: 
+                elif yesterday_close >= ma20_center and current_price < ma20_center: 
                     final_action = "🚨 強力賣出"
                 elif current_price >= high_toss_price: 
                     final_action = "🔴 賣出"
@@ -418,7 +389,6 @@ if selected_stock:
             df_detail['Sparse_Strong_Buy'] = sparse_buy_det
             buy_signals = df_detail[df_detail['Sparse_Strong_Buy']]
 
-            # 開始畫圖
             fig = go.Figure()
             fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
             fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
@@ -522,84 +492,4 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 spy_past_series = spy_df_global.loc[:date.strftime('%Y-%m-%d')]
                 if not spy_past_series.empty:
                     spy_past_close = spy_past_series['Close'].iloc[-1]
-                    spy_past_ma200 = spy_past_series['MA200'].iloc[-1]
-                    is_market_safe_past = spy_past_close >= spy_past_ma200 if not pd.isna(spy_past_ma200) else True
-                else:
-                    is_market_safe_past = True
-                
-                is_raw_strong_buy = (past_low <= low_b or past_low <= past_bb_lower) and past_rsi <= rsi_filter_val and (is_market_safe_past or (past_ma20 >= past_ma200))
-                if use_market_filter and not is_market_safe_past:
-                    is_raw_strong_buy = False
-                    
-                bt_touch_price = min(low_b, past_bb_lower, past_low)
-                
-                is_past_strong_buy = False
-                if is_raw_strong_buy:
-                    past_ma200_bias = ((past_ma200 - past_low) / past_ma200) * 100 if not pd.isna(past_ma200) else 0
-                    is_ma200_extreme_crash_bt = past_ma200_bias >= extreme_ma200_bias
-                    
-                    if last_bt_date is None:
-                        is_past_strong_buy = True
-                        last_bt_date = date
-                        last_bt_price = bt_touch_price
-                    else:
-                        days_passed = (date - last_bt_date).days
-                        if is_ma200_extreme_crash_bt:
-                            is_past_strong_buy = True
-                            last_bt_date = date
-                            last_bt_price = bt_touch_price
-                        elif days_passed > wave_window_days:
-                            is_past_strong_buy = True
-                            last_bt_date = date
-                            last_bt_price = bt_touch_price
-                        else:
-                            price_drop_target = last_bt_price * (1 - (min_drop_pct / 100))
-                            if bt_touch_price <= price_drop_target:
-                                is_past_strong_buy = True
-                                last_bt_date = date
-                                last_bt_price = bt_touch_price
-                
-                is_past_normal_buy = abs(past_low - past_ma20) / past_ma20 <= 0.02
-                
-                signal = None
-                if signal_choice == "買入 + 強力買入":
-                    if is_past_strong_buy: signal = "🔥 強力買入"
-                    elif is_past_normal_buy: signal = "🟢 買入"
-                elif signal_choice == "單獨買入" and is_past_normal_buy and not is_past_strong_buy:
-                    signal = "🟢 買入"
-                elif signal_choice == "單獨強力買入" and is_past_strong_buy:
-                    signal = "🔥 強力買入"
-                
-                if signal is None: continue 
-                
-                final_entry_price = last_bt_price if signal == "🔥 強力買入" else past_ma20
-                return_pct = ((latest_today_price - final_entry_price) / final_entry_price) * 100
-                
-                backtest_results.append({
-                    "產業": ticker_sector, "代碼": ticker,
-                    "建倉日期": date.strftime('%Y-%m-%d'), "當時訊號": signal,
-                    "買入價": f"{currency}{final_entry_price:.1f}", "今日最新價": f"{currency}{latest_today_price:.1f}",
-                    "累積報酬率": f"{return_pct:.1f}%"
-                })
-                break 
-
-        except Exception as e: pass
-
-if backtest_results:
-    df_bt_results = pd.DataFrame(backtest_results)
-    df_bt_results['sort_val'] = df_bt_results['累積報酬率'].str.replace('%', '').astype(float)
-    df_bt_results = df_bt_results.sort_values(by='sort_val', ascending=False).drop('sort_val', axis=1)
-    st.dataframe(df_bt_results, use_container_width=True, hide_index=True)
-    
-    avg_return = df_bt_results['累積報酬率'].str.replace('%', '').astype(float).mean()
-    win_rate = (df_bt_results['累積報酬率'].str.replace('%', '').astype(float) > 0).mean() * 100
-    
-    col_r1, col_r2, col_r3 = st.columns(3)
-    if avg_return > 0:
-        col_r1.success(f"📈 策略平均報酬率：**{avg_return:.1f}%**")
-    else:
-        col_r1.error(f"📉 策略平均報酬率：**{avg_return:.1f}%**")
-    col_r2.info(f"🎯 策略勝率 (正報酬比例)：**{win_rate:.1f}%**")
-    col_r3.metric(label="📊 同期對比 S&P 500 (SPY) 報酬率", value=f"{spy_performance_pct:.1f}%")
-else:
-    st.info(f"自 {bt_date_str} 起算，觀察名單內無任何標的觸發您選擇的條件。")
+                    spy_past
