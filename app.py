@@ -8,8 +8,8 @@ import json
 import re
 
 st.set_page_config(layout="wide", page_title="股票決策系統")
-st.title("🦅 美股+台股『極簡五等燈號』自動化決策系統")
-st.markdown("本系統已將繁雜指標降維，將多空結構簡化為**三大狀態**，並依據您設定的**MA20對稱 ATR 網格**給予五等 Action 建議。")
+st.title("🦅 股票『極簡五燈號』輔助決策系統")
+st.markdown("本系統將多空結構簡化並給予五等 Action 建議。")
 
 # ==============================================================================
 # 🌐 第一層：全球總體經濟與市場情緒觀測站
@@ -90,6 +90,10 @@ def load_spy_data(start_str):
 # 🛠️ 核心進化：新增「中長期季線趨勢破位法」與「空頭結構2次限購硬熔斷」的終極引擎
 def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil):
     df = df_data.copy()
+
+
+
+    
     sparse_strong_buy = pd.Series(False, index=df.index)
     
     if 'MA20_actual' not in df.columns or 'ATR' not in df.columns or 'Volume' not in df.columns:
@@ -218,24 +222,24 @@ if "bt_start_date" not in st.session_state: st.session_state.bt_start_date = dat
 
 selected_strategy = st.sidebar.segmented_control(
     "選擇運行策略：",
-    options=["🛡️ 保守型 (抄底)", "💎 中等型 (價值)", "⚡ 積極型 (網格)", "🎛️ 自訂微調"],
+    options=["🛡️ 保守型", "💎 價值型", "⚡ 積極型", "🎛️ 自訂義"],
     default=st.session_state.strategy_selection,
     key="strategy_selector"
 )
 
 if selected_strategy and selected_strategy != st.session_state.strategy_selection:
     st.session_state.strategy_selection = selected_strategy
-    if selected_strategy == "🛡️ 保守型 (抄底)":
+    if selected_strategy == "🛡️ 保守型":
         st.session_state.p_atr = 1.8         
         st.session_state.p_rsi = 29          
         st.session_state.p_drop = 8          
         st.session_state.p_bias = 6          
-    elif selected_strategy == "💎 中等型 (價值)":
+    elif selected_strategy == "💎 價值型":
         st.session_state.p_atr = 1.3         
         st.session_state.p_rsi = 34          
         st.session_state.p_drop = 5          
         st.session_state.p_bias = 4          
-    elif selected_strategy == "⚡ 積極型 (網格)":
+    elif selected_strategy == "⚡ 積極型":
         st.session_state.p_atr = 0.6         
         st.session_state.p_rsi = 45          
         st.session_state.p_drop = 2          
@@ -262,13 +266,13 @@ if is_any_slider_changed:
     st.session_state.p_rsi = rsi_filter_val
     st.session_state.p_drop = min_drop_pct
     st.session_state.p_bias = extreme_ma200_bias
-    st.session_state.strategy_selection = "🎛️ 自訂微調"
+    st.session_state.strategy_selection = "🎛️ 自訂義"
     st.rerun()
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
 st.markdown(f"##### ⚖️ 當前引擎運行狀態：`{st.session_state.strategy_selection}`")
-st.success("🎯 **高階優化公告**：系統已成功部署【中長線結構空頭排列（MA20 < MA60）之雙擊熔斷機制】。高波動弱勢股只要結構走壞，系統會強制將其一生加倉上限鎖死在 2 次之內，而 TSM、NVDA 等優質股在牛市修正時大戶爆量吸籌，將會被智慧型完美解鎖，大幅放大整體收益率！")
+#st.success("🎯 **高階優化公告**：系統已成功部署【中長線結構空頭排列（MA20 < MA60）之雙擊熔斷機制】。高波動弱勢股只要結構走壞，系統會強制將其一生加倉上限鎖死在 2 次之內，而 TSM、NVDA 等優質股在牛市修正時大戶爆量吸籌，將會被智慧型完美解鎖，大幅放大整體收益率！")
 
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
@@ -433,7 +437,7 @@ if selected_stock:
 # ⏳ 策略回測績效驗證 (🛠️ 狀態記憶升級版)
 # ==============================================================================
 st.markdown("---")
-st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
+st.header("⏳ 策略回測績效驗證")
 
 backtest_col1, backtest_col2, _ = st.columns([1, 1, 2])
 with backtest_col1:
