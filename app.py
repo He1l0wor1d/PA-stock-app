@@ -188,3 +188,304 @@ start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
 action_alerts = []
 action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
+# 核心交易訊號生成器：一視同仁，完全由滑桿引信驅動
+def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, ticker_sect):
+    df = df_data.copy()
+    sparse_strong_buy = pd.Series(False, index=df.index)
+    df_prices = pd.Series(0.0, index=df.index)
+    
+    # 計算基礎價格網格上限與下限
+    low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_mult)
+    price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
+    rsi_cond = df['RSI'] <= rsi_val
+    
+    # 🛠️ 修正 (1) & (3)：採用不重疊自然週 Calendar Set 容器，防止同週內任何形式的密集重複叫單
+    served_weeks = set()
+    last_buy_price = None
+    
+    for date, is_triggered in price_cond.items():
+        if is_triggered and rsi_cond.loc[date]:
+            if not pd.isna(df.loc[date, 'MA200']):
+                current_ma200_bias = ((df.loc[date, 'MA200'] - df.loc[date, 'Low']) / df.loc[date, 'MA200']) * 100
+            else: current_ma200_bias = 0
+            
+            is_ma200_extreme_crash = current_ma200_bias >= bias_val
+            is_market_safe_today = df.loc[date, 'SPY_Safe']
+            
+            is_allowed = is_market_safe_today or (df.loc[date, 'MA20_actual'] >= df.loc[date, 'MA200']) or is_ma200_extreme_crash
+            if use_market_filter and not is_market_safe_today and not is_ma200_extreme_crash:
+                is_allowed = False
+                
+            # 一視同仁：所有商品，不分策略，統一採用相同的牛市防護前置濾網（前日收盤必須高於年線）
+            if not df.loc[date, 'Is_True_Bull_Before']:
+                is_allowed = False
+                
+            if not is_allowed: continue
+                
+            current_touch_price = min(low_absorb_bound.loc[date], df.loc[date, 'BB_Lower'], df.loc[date, 'Low'])
+            current_year, current_week, _ = date.isocalendar()
+            current_yw = (current_year, current_week)
+            
+            # 🛠️ 修正 (3) 自然週限購鎖執行：如果該自然週已經在 Set 裡面，進入最嚴格控管
+            if current_yw in served_weeks:
+                price_drop_target = last_buy_price * (1 - (drop_pct / 100))
+                # 只有當下價格「再度殺穿跌幅門檻」時，才網開一面放行這筆同週加倉
+                if current_touch_price <= price_drop_target:
+                    sparse_strong_buy[date] = True
+                    last_buy_price = current_touch_price
+                continue
+            
+            # 開啟新的一週，百分之百自由放行
+            sparse_strong_buy[date] = True
+            served_weeks.add(current_yw)
+            last_buy_price = current_touch_price
+            
+    return sparse_strong_buy, low_absorb_bound
+    # ==============================================================================
+# 運算主看板燈號
+# ==============================================================================
+with st.spinner("正在同步全球資產核心信號..."):
+    for ticker in active_tickers:
+        try:
+            ticker_sector = INITIAL_SECTOR_MAP.get(ticker, "未分類")
+            is_tw = ".TW" in ticker or ".TWO" in ticker
+            currency_symbol = "NT$ " if is_tw else "$ "
+            
+            stock = yf.Ticker(ticker)
+            df = stock.history(start=start_date)
+            if df.empty or len(df) < 240: continue
+            
+            high_low = df['High'] - df['Low']
+            tr = pd.concat([high_low, (df['High'] - df['Close'].shift(1)).abs(), (df['Low'] - df['Close'].shift(1)).abs()], axis=1).max(axis=1)
+            df['ATR'] = tr.rolling(window=atr_period).mean()
+            df['MA20_actual'] = df['Close'].rolling(window=20).mean()
+            df['MA200'] = df['Close'].rolling(window=200).mean()
+            df['STD20'] = df['Close'].rolling(window=20).std()
+            df['BB_Lower'] = df['MA20_actual'] - (2 * df['STD20'])
+            df['RSI'] = calculate_rsi(df['Close'], 14)
+            df['Prev_Close'] = df['Close'].shift(1)
+            df['Prev_MA200'] = df['MA200'].shift(1)
+            df['Is_True_Bull_Before'] = df['Prev_Close'] >= df['Prev_MA200']
+            
+            df = df.join(spy_df_global['Close'].rename('SPY_Close'), how='left')
+            df = df.join(spy_df_global['MA200'].rename('SPY_MA200'), how='left')
+            df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
+            df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
+            
+            # 呼叫全新解耦模組，代入滑桿絕對參數
+            df['Sparse_Strong_Buy'], low_absorb_bound = generate_quant_signals(
+                df, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, ticker_sector
+            )
+            
+            current_price = float(df.iloc[-1]['Close'])  
+            yesterday_close = float(df.iloc[-2]['Close'])      
+            ma20_center = float(df.iloc[-1]['MA20_actual'])
+            latest_atr = float(df.iloc[-1]['ATR'])
+            latest_ma200 = float(df.iloc[-1]['MA200']) if not pd.isna(df.iloc[-1]['MA200']) else ma20_center
+            current_bb_lower = float(df.iloc[-1]['BB_Lower'])
+            
+            highest_20d = float(df['High'].rolling(window=20).max().iloc[-1])
+            trailing_stop_price = highest_20d - (2 * latest_atr)
+            trailing_stop_str = f"{currency_symbol}{trailing_stop_price:.1f}"
+
+            low_absorb_price = ma20_center - (latest_atr * st.session_state.p_atr)
+            high_toss_price = ma20_center + (latest_atr * st.session_state.p_atr)
+            
+            market_state = "⚪ 觀望"
+            final_action = "⚪ 觀望"
+            is_today_sparse_strong_buy = bool(df.iloc[-1]['Sparse_Strong_Buy'])
+            
+            if ma20_center >= latest_ma200:
+                market_state = "📈 多頭波段 (會漲)"
+                if is_today_sparse_strong_buy: final_action = "🔥 強力買入"
+                elif abs(current_price - ma20_center)/ma20_center <= 0.02: final_action = "🟢 買入"
+                elif current_price >= high_toss_price: final_action = "🔴 賣出"
+            else:
+                market_state = "📉 空頭結構 (會跌)"
+                if is_today_sparse_strong_buy: final_action = "🔥 強力買入"
+                elif yesterday_close >= ma20_center and current_price < ma20_center: final_action = "🚨 強力賣出"
+                elif current_price >= high_toss_price: final_action = "🔴 賣出"
+                elif abs(current_price - ma20_center)/ma20_center <= 0.02: final_action = "🟢 買入" 
+
+            if final_action in ["🔥 強力買入", "🟢 買入"]:
+                action_alerts.append({
+                    "代碼": ticker, "綜合建議": final_action, "市場狀態": market_state, 
+                    "當前股價": f"{currency_symbol}{current_price:.1f}",
+                    "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}"
+                })
+
+            summary_data.append({
+                "產業領域": ticker_sector, "代碼": ticker, "當前股價": f"{currency_symbol}{current_price:.1f}",
+                "移動停利價位": trailing_stop_str, "昨收盤價": f"{currency_symbol}{yesterday_close:.1f}",
+                "MA20": f"{currency_symbol}{ma20_center:.1f}", "市場狀態": market_state, "綜合建議": final_action,
+                "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}"
+            })
+        except Exception: pass
+
+st.header("🚨 今日促銷")
+if action_alerts:
+    st.dataframe(pd.DataFrame(action_alerts), use_container_width=True, hide_index=True)
+else:
+    st.info("🧘 報告隊長：今日觀察名單內皆無符合目前情境參數限制的強買標的。")
+
+st.markdown("---")
+
+st.header("📊 降維極簡大看板")
+if summary_data:
+    summary_df = pd.DataFrame(summary_data)
+    summary_df['sort'] = summary_df['綜合建議'].map(action_rank)
+    summary_df = summary_df.sort_values(by=["sort", "產業領域", "代碼"]).drop('sort', axis=1)
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+st.markdown("---")
+
+# ==============================================================================
+# 🔍 個股動態決策軌道與歷史 K 線繪製
+# ==============================================================================
+st.header("🔍 個股動態決策軌道與核心基本面")
+sorted_tickers = sorted(active_tickers)
+default_index = sorted_tickers.index("TSM") if "TSM" in sorted_tickers else 0
+selected_stock = st.selectbox("選擇個股查看歷史決策軌道：", options=sorted_tickers, index=default_index)
+
+if selected_stock:
+    try:
+        stock_detail = yf.Ticker(selected_stock)
+        df_detail = stock_detail.history(start=start_date)
+        
+        if not df_detail.empty and len(df_detail) > 240:
+            df_detail['MA20_plot'] = df_detail['Close'].rolling(window=20).mean()
+            df_detail['MA200'] = df_detail['Close'].rolling(window=200).mean()
+            df_detail['STD20'] = df_detail['Close'].rolling(window=20).std()
+            df_detail['BB_Lower'] = df_detail['MA20_plot'] - (2 * df_detail['STD20'])
+            df_detail['RSI'] = calculate_rsi(df_detail['Close'], 14)
+            df_detail['Prev_Close'] = df_detail['Close'].shift(1)
+            df_detail['Prev_MA200'] = df_detail['MA200'].shift(1)
+            df_detail['Is_True_Bull_Before'] = df_detail['Prev_Close'] >= df_detail['Prev_MA200']
+            
+            high_low_det = df_detail['High'] - df_detail['Low']
+            tr_det = pd.concat([high_low_det, (df_detail['High'] - df_detail['Close'].shift(1)).abs(), (df_detail['Low'] - df_detail['Close'].shift(1)).abs()], axis=1).max(axis=1)
+            df_detail['ATR'] = tr_det.rolling(window=atr_period).mean()
+            
+            df_detail = df_detail.join(spy_df_global['Close'].rename('SPY_Close'), how='left')
+            df_detail = df_detail.join(spy_df_global['MA200'].rename('SPY_MA200'), how='left')
+            df_detail['SPY_Safe'] = df_detail['SPY_Close'] >= df_detail['SPY_MA200']
+            df_detail['SPY_Safe'] = df_detail['SPY_Safe'].fillna(True)
+            
+            # 使用相同解耦函數，保障 100% 同步
+            df_detail['Sparse_Strong_Buy'], low_absorb_bound_det = generate_quant_signals(
+                df_detail, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, "個股繪圖"
+            )
+            buy_signals = df_detail[df_detail['Sparse_Strong_Buy']]
+
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(x=df_detail.index, open=df_detail['Open'], high=df_detail['High'], low=df_detail['Low'], close=df_detail['Close'], name='K線'))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA20_plot'], name='20MA 趨勢決策線', line=dict(color='orange', width=2)))
+            fig.add_trace(go.Scatter(x=df_detail.index, y=df_detail['MA200'], name='200MA 長期生命線', line=dict(color='crimson', width=2.5)))
+            
+            if not buy_signals.empty:
+                fig.add_trace(go.Scatter(
+                    x=buy_signals.index, y=buy_signals['Low'] * 0.96,  
+                    mode='text', text=['🔥' for _ in range(len(buy_signals))],
+                    textposition="bottom center", textfont=dict(size=18), name='🔥 強力買入點'
+                ))
+                
+            fig.update_layout(xaxis_rangeslider_visible=False, yaxis_title="價格", height=500, template="plotly_white")
+            st.plotly_chart(fig, use_container_width=True)
+                
+    except Exception as e: st.error(f"分析載入失敗: {e}")
+
+# ==============================================================================
+# ⏳ 策略回測績效驗證 (修正 (4) 統計並顯示組合總開槍買入次數)
+# ==============================================================================
+st.markdown("---")
+st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
+
+backtest_col1, backtest_col2, _ = st.columns([1, 1, 2])
+with backtest_col1:
+    backtest_date = st.date_input("📅 選擇掃描起始日期：", value=datetime(2025, 1, 1).date())
+
+with backtest_col2:
+    signal_choice = st.selectbox("🎯 選擇回測訊號類型：", options=["單獨強力買入", "單獨買入", "買入 + 強力買入"], index=0)
+
+bt_date_str = backtest_date.strftime('%Y-%m-%d')
+backtest_results = []
+portfolio_total_buy_signals = 0 # 🛠️ 修正 (4)：全品項加總開槍次數計數器
+
+with st.spinner("正在模擬時間軸歷史建倉..."):
+    for ticker in active_tickers:
+        try:
+            ticker_sector = INITIAL_SECTOR_MAP.get(ticker, "未分類")
+            df_bt = yf.Ticker(ticker).history(start=(backtest_date - timedelta(days=300)).strftime('%Y-%m-%d'))
+            if df_bt.empty or len(df_bt) < 240: continue
+            
+            df_bt['MA20_actual'] = df_bt['Close'].rolling(window=20).mean()
+            df_bt['MA200'] = df_bt['Close'].rolling(window=200).mean()
+            df_bt['STD20'] = df_bt['Close'].rolling(window=20).std()
+            df_bt['BB_Lower'] = df_bt['MA20_actual'] - (2 * df_bt['STD20'])
+            df_bt['RSI'] = calculate_rsi(df_bt['Close'], 14)
+            df_bt['Prev_Close'] = df_bt['Close'].shift(1)
+            df_bt['Prev_MA200'] = df_bt['MA200'].shift(1)
+            df_bt['Is_True_Bull_Before'] = df_bt['Prev_Close'] >= df_bt['Prev_MA200']
+            
+            hl = df_bt['High'] - df_bt['Low']
+            tr = pd.concat([hl, (df_bt['High'] - df_bt['Close'].shift(1)).abs(), (df_bt['Low'] - df_bt['Close'].shift(1)).abs()], axis=1).max(axis=1)
+            df_bt['ATR'] = tr.rolling(window=atr_period).mean()
+
+            df_bt = df_bt.join(spy_df_global['Close'].rename('SPY_Close'), how='left')
+            df_bt = df_bt.join(spy_df_global['MA200'].rename('SPY_MA200'), how='left')
+            df_bt['SPY_Safe'] = df_bt['SPY_Close'] >= df_bt['SPY_MA200']
+            df_bt['SPY_Safe'] = df_bt['SPY_Safe'].fillna(True)
+
+            df_scan = df_bt.loc[bt_date_str:].copy()
+            if df_scan.empty: continue
+            
+            latest_today_price = df_bt['Close'].iloc[-1]
+            currency = "NT$ " if ".TW" in ticker else "$ "
+            
+            # 回測端完全代入相同函數，絕無額外參數污染
+            df_scan['Sparse_Strong_Buy'], low_absorb_bound_bt = generate_quant_signals(
+                df_scan, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, "回測模組"
+            )
+            
+            total_strong_buy_count = df_scan['Sparse_Strong_Buy'].sum()
+            portfolio_total_buy_signals += total_strong_buy_count  # 累加總量
+            
+            # 計算回測首筆單效益
+            first_trade_data = None
+            buy_dates = df_scan[df_scan['Sparse_Strong_Buy']].index
+            
+            if not buy_dates.empty:
+                first_date = buy_dates[0]
+                final_entry_price = min(low_absorb_bound_bt.loc[first_date], df_scan.loc[first_date, 'BB_Lower'], df_scan.loc[first_date, 'Low'])
+                
+                post_buy_df = df_scan.loc[first_date:]
+                max_dd_pct = ((post_buy_df['Low'].min() - final_entry_price) / final_entry_price) * 100
+                max_dd_pct = min(max_dd_pct, 0.0)
+                
+                return_pct = ((latest_today_price - final_entry_price) / final_entry_price) * 100
+                first_trade_data = {
+                    "產業": ticker_sector, "代碼": ticker, "首次建倉日": first_date.strftime('%Y-%m-%d'),
+                    "當時訊號": "🔥 強力買入", "模擬買入價": f"{currency}{final_entry_price:.1f}",
+                    "最大套牢跌幅": f"{max_dd_pct:.1f}%", "累積報酬率": f"{return_pct:.1f}%",
+                    "強買訊號次數": f"{total_strong_buy_count} 次"
+                }
+            
+            if first_trade_data is not None:
+                backtest_results.append(first_trade_data)
+        except Exception: pass
+
+if backtest_results:
+    df_bt_results = pd.DataFrame(backtest_results)
+    df_bt_results['sort_val'] = df_bt_results['累積報酬率'].str.replace('%', '').astype(float)
+    df_bt_results = df_bt_results.sort_values(by='sort_val', ascending=False).drop('sort_val', axis=1)
+    
+    cols_order = ["產業", "代碼", "首次建倉日", "當時訊號", "強買訊號次數", "模擬買入價", "最大套牢跌幅", "累積報酬率"]
+    st.dataframe(df_bt_results[[c for c in cols_order if c in df_bt_results.columns]], use_container_width=True, hide_index=True)
+    
+    avg_return = df_bt_results['累積報酬率'].str.replace('%', '').astype(float).mean()
+    win_rate = (df_bt_results['累積報酬率'].str.replace('%', '').astype(float) > 0).mean() * 100
+    
+    # 🛠️ 修正 (4)：回測數據尾端，新增「💰 期間內總買入次數：XX 次」
+    st.info(f"📈 策略平均報酬率：**{avg_return:.1f}%** | 🎯 策略勝率：**{win_rate:.1f}%** | 💰 期間內組合總買入次數：**{portfolio_total_buy_signals} 次** | 📊 同期對比 SPY：**{spy_performance_pct:.1f}%**")
+else:
+    st.info(f"自 {bt_date_str} 起算，目前的滑桿參數未觸發任何回測歷史建倉單。")
