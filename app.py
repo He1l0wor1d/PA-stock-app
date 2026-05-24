@@ -230,19 +230,19 @@ selected_strategy = st.sidebar.segmented_control(
 if selected_strategy and selected_strategy != st.session_state.strategy_selection:
     st.session_state.strategy_selection = selected_strategy
     if selected_strategy == "🛡️ 保守型":
-        st.session_state.p_atr = 1.8         
-        st.session_state.p_rsi = 29          
+        st.session_state.p_atr = 2.0         
+        st.session_state.p_rsi = 25          
         st.session_state.p_drop = 8          
         st.session_state.p_bias = 6          
     elif selected_strategy == "💎 價值型":
-        st.session_state.p_atr = 1.3         
-        st.session_state.p_rsi = 34          
-        st.session_state.p_drop = 5          
+        st.session_state.p_atr = 1.5         
+        st.session_state.p_rsi = 35          
+        st.session_state.p_drop = 6          
         st.session_state.p_bias = 4          
     elif selected_strategy == "⚡ 積極型":
-        st.session_state.p_atr = 0.6         
+        st.session_state.p_atr = 1.0         
         st.session_state.p_rsi = 45          
-        st.session_state.p_drop = 2          
+        st.session_state.p_drop = 4          
         st.session_state.p_bias = 2          
     st.rerun()
 
@@ -250,9 +250,9 @@ st.sidebar.header("📊 對稱網格參數微調")
 atr_period = 14
 
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, value=st.session_state.p_atr, step=0.1)
-rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制", 15, 45, value=st.session_state.p_rsi, step=1)
+rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制", 10, 50, value=st.session_state.p_rsi, step=1)
 min_drop_pct = st.sidebar.slider("📉 攤平「再跌幅門檻 (%)」", 2, 15, value=st.session_state.p_drop, step=1)
-extreme_ma200_bias = st.sidebar.slider("💥 跌破年線負乖離門檻 (%)", 3, 20, value=st.session_state.p_bias, step=1)
+extreme_ma200_bias = st.sidebar.slider("💥 跌破年線負乖離門檻 (%)", 2, 20, value=st.session_state.p_bias, step=1)
 
 is_any_slider_changed = (
     atr_multiplier != st.session_state.p_atr or 
