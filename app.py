@@ -492,4 +492,84 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 spy_past_series = spy_df_global.loc[:date.strftime('%Y-%m-%d')]
                 if not spy_past_series.empty:
                     spy_past_close = spy_past_series['Close'].iloc[-1]
-                    spy_past
+                    spy_past_ma200 = spy_past_series['MA200'].iloc[-1]
+                    is_market_safe_past = spy_past_close >= spy_past_ma200 if not pd.isna(spy_past_ma200) else True
+                else:
+                    is_market_safe_past = True
+                
+                is_raw_strong_buy = (past_low <= low_b or past_low <= past_bb_lower) and past_rsi <= rsi_filter_val and (is_market_safe_past or (past_ma20 >= past_ma200))
+                if use_market_filter and not is_market_safe_past:
+                    is_raw_strong_buy = False
+                    
+                bt_touch_price = min(low_b, past_bb_lower, past_low)
+                
+                is_past_strong_buy = False
+                if is_raw_strong_buy:
+                    past_ma200_bias = ((past_ma200 - past_low) / past_ma200) * 100 if not pd.isna(past_ma200) else 0
+                    is_ma200_extreme_crash_bt = past_ma200_bias >= extreme_ma200_bias
+                    
+                    if last_bt_date is None:
+                        is_past_strong_buy = True
+                        last_bt_date = date
+                        last_bt_price = bt_touch_price
+                    else:
+                        days_passed = (date - last_bt_date).days
+                        if is_ma200_extreme_crash_bt:
+                            is_past_strong_buy = True
+                            last_bt_date = date
+                            last_bt_price = bt_touch_price
+                        elif days_passed > wave_window_days:
+                            is_past_strong_buy = True
+                            last_bt_date = date
+                            last_bt_price = bt_touch_price
+                        else:
+                            price_drop_target = last_bt_price * (1 - (min_drop_pct / 100))
+                            if bt_touch_price <= price_drop_target:
+                                is_past_strong_buy = True
+                                last_bt_date = date
+                                last_bt_price = bt_touch_price
+                
+                is_past_normal_buy = abs(past_low - past_ma20) / past_ma20 <= 0.02
+                
+                signal = None
+                if signal_choice == "買入 + 強力買入":
+                    if is_past_strong_buy: signal = "🔥 強力買入"
+                    elif is_past_normal_buy: signal = "🟢 買入"
+                elif signal_choice == "單獨買入" and is_past_normal_buy and not is_past_strong_buy:
+                    signal = "🟢 買入"
+                elif signal_choice == "單獨強力買入" and is_past_strong_buy:
+                    signal = "🔥 強力買入"
+                
+                if signal is None: continue 
+                
+                final_entry_price = last_bt_price if signal == "🔥 強力買入" else past_ma20
+                return_pct = ((latest_today_price - final_entry_price) / final_entry_price) * 100
+                
+                backtest_results.append({
+                    "產業": ticker_sector, "代碼": ticker,
+                    "建倉日期": date.strftime('%Y-%m-%d'), "當時訊號": signal,
+                    "買入價": f"{currency}{final_entry_price:.1f}", "今日最新價": f"{currency}{latest_today_price:.1f}",
+                    "累積報酬率": f"{return_pct:.1f}%"
+                })
+                break 
+
+        except Exception as e: pass
+
+if backtest_results:
+    df_bt_results = pd.DataFrame(backtest_results)
+    df_bt_results['sort_val'] = df_bt_results['累積報酬率'].str.replace('%', '').astype(float)
+    df_bt_results = df_bt_results.sort_values(by='sort_val', ascending=False).drop('sort_val', axis=1)
+    st.dataframe(df_bt_results, use_container_width=True, hide_index=True)
+    
+    avg_return = df_bt_results['累積報酬率'].str.replace('%', '').astype(float).mean()
+    win_rate = (df_bt_results['累積報酬率'].str.replace('%', '').astype(float) > 0).mean() * 100
+    
+    col_r1, col_r2, col_r3 = st.columns(3)
+    if avg_return > 0:
+        col_r1.success(f"📈 策略平均報酬率：**{avg_return:.1f}%**")
+    else:
+        col_r1.error(f"📉 策略平均報酬率：**{avg_return:.1f}%**")
+    col_r2.info(f"🎯 策略勝率 (正報酬比例)：**{win_rate:.1f}%**")
+    col_r3.metric(label="📊 同期對比 S&P 500 (SPY) 報酬率", value=f"{spy_performance_pct:.1f}%")
+else:
+    st.info(f"自 {bt_date_str} 起算，觀察名單內無任何標的觸發您選擇的條件。")
