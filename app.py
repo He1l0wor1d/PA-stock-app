@@ -48,7 +48,7 @@ with macro_col3:
     st.dataframe(pd.DataFrame(calendar_data), use_container_width=True, hide_index=True)
 
 # ==============================================================================
-# ✨ 第三層：AGI 2027 敘事與 SALP (13F) 聰明錢觀測站
+# ✨ 第三層：AGI 2027 敘事與 SALP (13F) 聰明錢觀測站（完美歸位在市場指引之後）
 # ==============================================================================
 st.markdown("### 🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站")
 salp_col1, salp_col2 = st.columns([1, 1.8])
@@ -72,7 +72,7 @@ with salp_col2:
 st.markdown("---")
 
 # ==============================================================================
-# 🧮 基礎核心數學指標函式 (優先定義，防止 NameError)
+# 🧮 基礎核心數學指標與資料加載函式 (徹底解決 NameError)
 # ==============================================================================
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -81,8 +81,14 @@ def calculate_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
+@st.cache_data(ttl=3600)
+def load_spy_data(start_str):
+    spy = yf.Ticker("SPY").history(start=start_str)
+    spy['MA200'] = spy['Close'].rolling(window=200).mean()
+    return spy
+
 # 核心交易訊號生成器：一視同仁，完全由滑桿引信與自然週限購盾驅動
-def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil, spy_df):
+def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil):
     df = df_data.copy()
     sparse_strong_buy = pd.Series(False, index=df.index)
     
@@ -237,6 +243,7 @@ summary_data = []
 action_alerts = []
 action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
 
+# 🚀 執行 SPY 加載 (現在絕不會報錯了)
 spy_df_global = load_spy_data(start_date)
 
 # ==============================================================================
@@ -272,7 +279,7 @@ with st.spinner("正在同步全球資產核心信號..."):
             
             # 使用解耦模組
             df['Sparse_Strong_Buy'], low_absorb_bound = generate_quant_signals(
-                df, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter, spy_df_global
+                df, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
             
             current_price = float(df.iloc[-1]['Close'])  
@@ -371,7 +378,7 @@ if selected_stock:
             
             # 調用解耦函數
             df_detail['Sparse_Strong_Buy'], low_absorb_bound_det = generate_quant_signals(
-                df_detail, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter, spy_df_global
+                df_detail, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
             buy_signals = df_detail[df_detail['Sparse_Strong_Buy']]
 
@@ -442,7 +449,7 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
             
             # 回測端完全代入相同函數
             df_scan['Sparse_Strong_Buy'], low_absorb_bound_bt = generate_quant_signals(
-                df_scan, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter, spy_df_global
+                df_scan, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
             
             total_strong_buy_count = df_scan['Sparse_Strong_Buy'].sum()
