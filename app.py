@@ -110,7 +110,7 @@ if "p_bias" not in st.session_state: st.session_state.p_bias = 8
 btn_col1, btn_col2, btn_col3 = st.sidebar.columns(3)
 
 with btn_col1:
-    if st.button("💎 \n 價值投資"):
+    if st.button("價值投資\n💎"):
         st.session_state.p_atr = 1.4
         st.session_state.p_rsi = 35
         st.session_state.p_window = 20
@@ -119,7 +119,7 @@ with btn_col1:
         st.rerun()
 
 with btn_col2:
-    if st.button("🔥 \n 抄底"):
+    if st.button("抄底\n🔥"):
         st.session_state.p_atr = 2.1
         st.session_state.p_rsi = 25
         st.session_state.p_window = 30
@@ -128,7 +128,7 @@ with btn_col2:
         st.rerun()
 
 with btn_col3:
-    if st.button("⚡ \n 短期波段"):
+    if st.button("波段\n⚡"):
         st.session_state.p_atr = 1.0
         st.session_state.p_rsi = 42
         st.session_state.p_window = 50
