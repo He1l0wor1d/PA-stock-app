@@ -110,7 +110,7 @@ if "p_bias" not in st.session_state: st.session_state.p_bias = 8
 btn_col1, btn_col2, btn_col3 = st.sidebar.columns(3)
 
 with btn_col1:
-    if st.button("💎 價值投資"):
+    if st.button("💎 (/n) 價值投資"):
         st.session_state.p_atr = 1.4
         st.session_state.p_rsi = 35
         st.session_state.p_window = 20
