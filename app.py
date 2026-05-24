@@ -161,16 +161,6 @@ if (atr_multiplier != st.session_state.p_atr or rsi_filter_val != st.session_sta
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
-# 頁面上方維持清楚的特點解說卡片
-if st.session_state.strategy_selection == "🛡️ 保守型 (抄底)":
-    st.success(f"### 當前運行策略：{st.session_state.strategy_selection}\n*特點：出手頻率極低，主打 2025/4 這種史詩級非理性崩盤，資金利用安全率極高。*")
-elif st.session_state.strategy_selection == "💎 中等型 (價值)":
-    st.info(f"### 當前運行策略：{st.session_state.strategy_selection}\n*特點：出手頻率中等，捕捉板塊價值輪動拉回，用多標的分散布局換取中上回報。*")
-elif st.session_state.strategy_selection == "⚡ 積極型 (網格)":
-    st.warning(f"### 當前運行策略：{st.session_state.strategy_selection}\n*特點：出手高頻且極其敏感，容易在半山腰反覆吃單被套。**實戰操作需具備極其雄厚的無限資金支持！***")
-else:
-    st.markdown(f"##### ⚖️ 當前運行策略：`{st.session_state.strategy_selection}` (滑桿自訂參數狀態中)")
-
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
 action_alerts = []
