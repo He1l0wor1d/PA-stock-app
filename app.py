@@ -60,7 +60,7 @@ with salp_col1:
     st.info("💡 **SALP 觀點**：AI 發展最大限制是「天然氣產量」與「變壓器交付」。AI 必須插電，電力層是未來硬資產。")
 
 with salp_col2:
-    st.markdown("##### 🏦 SALP 基金敘事層級持仓")
+    st.markdown("##### 🏦 SALP 基金敘事層級持倉")
     salp_data = {
         "敘事層級": ["⚡ 電力層 (Power)", "☁️ AI 雲端 (AI Cloud)", "🌐 光通訊 (Photonics)", "🖥️ 運算層 (Compute)"],
         "代表標的": ["BE, CEG, VST", "CRWV, CORZ, IREN", "GLW, COHR", "NVDA, SMH, TSM"],
@@ -87,7 +87,7 @@ def load_spy_data(start_str):
     spy['MA200'] = spy['Close'].rolling(window=200).mean()
     return spy
 
-# 🛠️ 核心重構：加入「實時趨勢認錯機制」的終極量化引擎
+# 🛠️ 核心重構：升級為「30日建倉鎖 + 20日新低熔斷機制」的剛性防飛刀引擎
 def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil):
     df = df_data.copy()
     sparse_strong_buy = pd.Series(False, index=df.index)
@@ -95,16 +95,24 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
     if 'MA20_actual' not in df.columns or 'ATR' not in df.columns:
         return sparse_strong_buy, pd.Series(0.0, index=df.index)
         
+    # 動態計算極短線 5MA 以及 20日收盤最低價（用來判定是否處於單邊陰跌新低中）
+    df['MA5'] = df['Close'].rolling(window=5).mean()
+    df['Low_20D_Close'] = df['Close'].rolling(window=20).min()
+    
     low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_mult)
     price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
     rsi_cond = df['RSI'] <= rsi_val
     
     served_weeks = set()
-    first_buy_price = None  # 追蹤第一槍進場價格成本
+    last_buy_idx = None  # 記錄上一次成功扣引信的整數索引位置
+    last_buy_price = None
     
-    for date, is_triggered in price_cond.items():
-        if is_triggered and rsi_cond.loc[date]:
-            if pd.isna(df.loc[date, 'MA20_actual']) or pd.isna(df.loc[date, 'ATR']): 
+    # 轉為位置索引以利進行剛性天數跨度鎖定
+    date_list = df.index.tolist()
+    
+    for idx, date in enumerate(date_list):
+        if price_cond.loc[date] and rsi_cond.loc[date]:
+            if pd.isna(df.loc[date, 'MA20_actual']) or pd.isna(df.loc[date, 'ATR']) or pd.isna(df.loc[date, 'Low_20D_Close']): 
                 continue
                 
             if not pd.isna(df.loc[date, 'MA200']):
@@ -118,7 +126,6 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             if use_market_fil and not is_market_safe_today and not is_ma200_extreme_crash:
                 is_allowed = False
                 
-            # 一視同仁前置多頭濾網
             if not df.loc[date, 'Is_True_Bull_Before']:
                 is_allowed = False
                 
@@ -128,34 +135,36 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             current_year, current_week, _ = date.isocalendar()
             current_yw = (current_year, current_week)
             
-            # 🛠️ 【實時認錯制死鎖】
-            # 如果之前已經開過第一槍，但現在股價非但沒反彈，反而跌破第一槍成本，且月線（MA20）方向下墜
-            # 系統立刻判定為「買錯了」，強制鎖死、不准再補槍！直到股價重新站回月線之上。
-            if first_buy_price is not None:
-                is_stock_falling_abyss = (current_touch_price < first_buy_price) and (df.loc[date, 'MA20_actual'] < df.loc[date, 'MA200'])
-                if is_stock_falling_abyss and (df.loc[date, 'Close'] < df.loc[date, 'MA20_actual']):
-                    continue  # 💥 實時認錯！直接跳過，SOFI/NOW 在這裡會被強制鎖在第一槍
+            # 🛠️ 【剛性認錯熔斷盾】
+            if last_buy_idx is not None:
+                # 限制 1：30個交易日之內屬於首次加倉保護圈，死活不准補第二槍
+                if (idx - last_buy_idx) < 30:
+                    continue
+                
+                # 限制 2（鋼鐵認錯）：如果過了30天，股價依然在創20天收盤新低，或者連極短線5MA都站不上
+                # 證明這檔股票趨勢完全壞透（如NOW/SOFI中期修正），系統果斷認錯，無限期停損不准加倉！
+                is_falling_knife = (df.loc[date, 'Close'] <= df.loc[date, 'Low_20D_Close']) or (df.loc[date, 'Close'] < df.loc[date, 'MA5'])
+                if is_falling_knife:
+                    continue  # 💥 攔截成功！單邊熊市陰跌股在此會被直接物理熔斷
             
-            # 自然週限購盾
+            # 自然週限購判定（通過認錯機制後才執行）
             if current_yw in served_weeks:
                 price_drop_target = last_buy_price * (1 - (drop_pct / 100))
                 if current_touch_price <= price_drop_target:
                     sparse_strong_buy[date] = True
                     last_buy_price = current_touch_price
+                    last_buy_idx = idx
                 continue
             
-            # 第一槍建倉，鎖定初始成本價
+            # 放行扣引信，更新追蹤錨點
             sparse_strong_buy[date] = True
             served_weeks.add(current_yw)
             last_buy_price = current_touch_price
-            if first_buy_price is None:
-                first_buy_price = current_touch_price  # 錨定認錯基準線
+            last_buy_idx = idx
             
     return sparse_strong_buy, low_absorb_bound
 
-# ==============================================================================
 # 全量股票資料庫初始化
-# ==============================================================================
 INITIAL_SECTOR_MAP = {
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
@@ -253,8 +262,8 @@ if is_any_slider_changed:
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
-st.markdown(f"##### ⚖️ 當前引擎運行狀態：`{st.session_state.strategy_selection}` (滑桿參數：ATR {st.session_state.p_atr}x / RSI {st.session_state.p_rsi} / 再跌門檻 {st.session_state.p_drop}% / 年線負乖離 {st.session_state.p_bias}%)")
-st.caption("💡 量化引擎已完全解耦。【🚀 實時認錯熔斷盾已熔接進底層】只要第一槍買錯且跌穿成本，後續加倉引信永久鎖死，完美封印 SOFI / NOW 密集密集飛刀雜訊。")
+st.markdown(f"##### ⚖️ 當前引擎運行狀態：`{st.session_state.strategy_selection}`")
+st.success("🛡️ **實戰風控公告**：底層已焊死【30日建倉保護鎖 + 20日收盤新低認錯熔斷線】。任何股票只要買入後陷入連環陰跌、天天創新低且站不上 5MA，系統會判定『這檔買錯了』並強制永久停留在第 1 筆單，杜絕資金黑洞！")
 
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
@@ -294,7 +303,6 @@ with st.spinner("正在同步全球資產核心信號..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
-            # 使用解耦且具備認錯機制的模組
             df['Sparse_Strong_Buy'], low_absorb_bound = generate_quant_signals(
                 df, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
@@ -475,7 +483,7 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
             latest_today_price = df_bt['Close'].iloc[-1]
             currency = "NT$ " if ".TW" in ticker else "$ "
             
-            # 回測同步認錯引擎
+            # 回測同步剛性認錯防線
             df_scan['Sparse_Strong_Buy'], low_absorb_bound_bt = generate_quant_signals(
                 df_scan, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
