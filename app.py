@@ -108,29 +108,30 @@ if "p_drop" not in st.session_state: st.session_state.p_drop = 5
 if "p_bias" not in st.session_state: st.session_state.p_bias = 8
 
 btn_col1, btn_col2, btn_col3 = st.sidebar.columns(3)
-with btn_col1:
-    if st.button("🔥 世紀大底\n(2025/4專用)"):
-        st.session_state.p_atr = 2.0
-        st.session_state.p_rsi = 25
-        st.session_state.p_window = 45
-        st.session_state.p_drop = 8
-        st.session_state.p_bias = 7
-        st.rerun()
 
-with btn_col2:
-    if st.button("💎 價值板塊\n(個股被低估)"):
+with btn_col1:
+    if st.button("💎 價值投資"):
         st.session_state.p_atr = 1.4
         st.session_state.p_rsi = 35
-        st.session_state.p_window = 30
+        st.session_state.p_window = 20
         st.session_state.p_drop = 5
         st.session_state.p_bias = 4
         st.rerun()
 
+with btn_col2:
+    if st.button("🔥 抄底"):
+        st.session_state.p_atr = 2.1
+        st.session_state.p_rsi = 25
+        st.session_state.p_window = 30
+        st.session_state.p_drop = 8
+        st.session_state.p_bias = 7
+        st.rerun()
+
 with btn_col3:
-    if st.button("⚡ ATR波段\n(快進快出)"):
-        st.session_state.p_atr = 0.8
+    if st.button("⚡ 短期波段:
+        st.session_state.p_atr = 1.0
         st.session_state.p_rsi = 42
-        st.session_state.p_window = 10
+        st.session_state.p_window = 50
         st.session_state.p_drop = 2
         st.session_state.p_bias = 2
         st.rerun()
