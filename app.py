@@ -100,13 +100,15 @@ active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)"
 
 st.sidebar.header("📊 對稱網格參數設定")
 atr_period = 14
-st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天（精簡標註優化）")
+st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天")
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, 1.4, 0.1)
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (預設32常態賣壓 / 25極端恐慌賣壓)", 15, 45, 32, 1)
 
 wave_window_days = st.sidebar.slider("🛡️ 空間排他時間視窗 (天)", 10, 90, 30, 5)
 min_drop_pct = st.sidebar.slider("📉 視窗內二次強買必備「再跌幅門檻」", 2, 15, 5, 1)
-extreme_bias_pct = st.sidebar.slider("💥 斷崖暴跌偏離強制解鎖門檻 (相較20MA負乖離%)", 10, 25, 14, 1)
+
+# 🛠️ 修正A的核心精髓：改採個股盤中跌破「200MA 年線」的負乖離率過濾，預設精準定在 8% 
+extreme_ma200_bias = st.sidebar.slider("💥 修正A：盤中跌破年線 (200MA) 負乖離強制解鎖門檻 (%)", 3, 20, 8, 1)
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
@@ -157,7 +159,7 @@ with st.spinner("正在提煉核心決策..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
-            # 🛠️ 即時面板同步優化：採用當日最低價 Low 判定是否盤中插針觸及臨界點
+            # 盤中最低價插針與技術超賣判定
             low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_multiplier)
             price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
             rsi_cond = df['RSI'] <= rsi_filter_val
@@ -165,17 +167,22 @@ with st.spinner("正在提煉核心決策..."):
             if use_market_filter:
                 raw_panic_signal = raw_panic_signal & df['SPY_Safe']
             
+            # 🛠️ 導入修正A：動態年線負乖離強制破鎖序列演算法
             sparse_strong_buy = pd.Series(False, index=df.index)
             last_buy_date = None
             last_buy_price = None
             
             for date, is_triggered in raw_panic_signal.items():
                 if is_triggered:
-                    # 🛠️ 負乖離率同樣改採盤中最低價 Low 計算極值
-                    current_bias = ((df.loc[date, 'MA20_actual'] - df.loc[date, 'Low']) / df.loc[date, 'MA20_actual']) * 100
-                    is_extreme_crash = current_bias >= extreme_bias_pct
+                    # 🛠️ 修正A核心：計算當天最低價相較於 200MA (年線) 的負乖離率
+                    if not pd.isna(df.loc[date, 'MA200']):
+                        current_ma200_bias = ((df.loc[date, 'MA200'] - df.loc[date, 'Low']) / df.loc[date, 'MA200']) * 100
+                    else:
+                        current_ma200_bias = 0
                     
-                    # 以盤中理論上能買到的最優限價或最低價做為回測買入基準價
+                    # 💥 判定是否為 2025/4 這種世紀關稅利空引發的年線斷崖超跌極值
+                    is_ma200_extreme_crash = current_ma200_bias >= extreme_ma200_bias
+                    
                     current_touch_price = min(low_absorb_bound.loc[date], df.loc[date, 'BB_Lower'], df.loc[date, 'Low'])
                     
                     if last_buy_date is None:
@@ -185,7 +192,8 @@ with st.spinner("正在提煉核心決策..."):
                     else:
                         days_passed = (date - last_buy_date).days
                         
-                        if is_extreme_crash:
+                        if is_ma200_extreme_crash:
+                            # 💥 修正A特權啟動：無視任何短期時間鎖與5%空間限制，強制亮燈狙擊4月史詩大底！
                             sparse_strong_buy[date] = True
                             last_buy_date = date
                             last_buy_price = current_touch_price
@@ -262,7 +270,7 @@ st.header("🚨 今日促銷")
 if action_alerts:
     st.dataframe(pd.DataFrame(action_alerts), use_container_width=True, hide_index=True)
 else:
-    st.info("🧘 報告隊長：今日名單內皆無符合『盤中插針與動態過濾限制』的促銷標的。")
+    st.info("🧘 報告隊長：今日名單內皆無符合『修正A年線解鎖限制』的促銷標的。")
 
 st.markdown("---")
 
@@ -311,21 +319,24 @@ if selected_stock:
             df_detail['SPY_Safe'] = df_detail['SPY_Close'] >= df_detail['SPY_MA200']
             df_detail['SPY_Safe'] = df_detail['SPY_Safe'].fillna(True)
             
-            # 🛠️ 圖表端同步修正：採用 Low 判定插針觸發
             price_cond = (df_detail['Low'] <= df_detail['Low_Absorb']) | (df_detail['Low'] <= df_detail['BB_Lower'])
             rsi_cond = df_detail['RSI'] <= rsi_filter_val
             raw_panic_det = rsi_cond & price_cond & (df_detail['SPY_Safe'] | (df_detail['MA20_plot'] >= df_detail['MA200']))
             if use_market_filter:
                 raw_panic_det = raw_panic_det & df_detail['SPY_Safe']
                 
+            # 圖表端同步執行修正A年線解鎖演算法
             sparse_buy_det = pd.Series(False, index=df_detail.index)
             last_date_det = None
             last_price_det = None
             
             for date, is_triggered in raw_panic_det.items():
                 if is_triggered:
-                    current_bias_det = ((df_detail.loc[date, 'MA20_plot'] - df_detail.loc[date, 'Low']) / df_detail.loc[date, 'MA20_plot']) * 100
-                    is_extreme_crash_det = current_bias_det >= extreme_bias_pct
+                    if not pd.isna(df_detail.loc[date, 'MA200']):
+                        current_ma200_bias_det = ((df_detail.loc[date, 'MA200'] - df_detail.loc[date, 'Low']) / df_detail.loc[date, 'MA200']) * 100
+                    else:
+                        current_ma200_bias_det = 0
+                    is_extreme_crash_det = current_ma200_bias_det >= extreme_ma200_bias
                     
                     current_touch_price_det = min(df_detail.loc[date, 'Low_Absorb'], df_detail.loc[date, 'BB_Lower'], df_detail.loc[date, 'Low'])
                     
@@ -335,7 +346,11 @@ if selected_stock:
                         last_price_det = current_touch_price_det
                     else:
                         days_passed = (date - last_date_det).days
-                        if days_passed > wave_window_days:
+                        if is_extreme_crash_det:
+                            sparse_buy_det[date] = True
+                            last_date_det = date
+                            last_price_det = current_touch_price_det
+                        elif days_passed > wave_window_days:
                             sparse_buy_det[date] = True
                             last_date_det = date
                             last_price_det = current_touch_price_det
@@ -500,18 +515,17 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 else:
                     is_market_safe_past = True
                 
-                # 🛠️ 回測核心修正：改採盤中最低點 Low 判定是否成功跨越網格或布林臨界點
                 is_raw_strong_buy = (past_low <= low_b or past_low <= past_bb_lower) and past_rsi <= rsi_filter_val and (is_market_safe_past or (past_ma20 >= past_ma200))
                 if use_market_filter and not is_market_safe_past:
                     is_raw_strong_buy = False
                     
-                # 盤中限價或插針理論上能買到的最優真實價位
                 bt_touch_price = min(low_b, past_bb_lower, past_low)
                 
                 is_past_strong_buy = False
                 if is_raw_strong_buy:
-                    past_bias = ((past_ma20 - past_low) / past_ma20) * 100
-                    is_extreme_crash_bt = past_bias >= extreme_bias_pct
+                    # 回測端同步採用修正A：計算相較於年線 200MA 的盤中負乖離率
+                    past_ma200_bias = ((past_ma200 - past_low) / past_ma200) * 100 if not pd.isna(past_ma200) else 0
+                    is_ma200_extreme_crash_bt = past_ma200_bias >= extreme_ma200_bias
                     
                     if last_bt_date is None:
                         is_past_strong_buy = True
@@ -519,7 +533,7 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                         last_bt_price = bt_touch_price
                     else:
                         days_passed = (date - last_bt_date).days
-                        if is_extreme_crash_bt:
+                        if is_ma200_extreme_crash_bt:
                             is_past_strong_buy = True
                             last_bt_date = date
                             last_bt_price = bt_touch_price
@@ -534,7 +548,6 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                                 last_bt_date = date
                                 last_bt_price = bt_touch_price
                 
-                # 普通買入（回試20MA）同樣改採 Low 判定是否觸及
                 is_past_normal_buy = abs(past_low - past_ma20) / past_ma20 <= 0.02
                 
                 signal = None
@@ -548,7 +561,6 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 
                 if signal is None: continue 
                 
-                # 採用盤中實際能撈到的最優建倉價位（`last_bt_price` 或 20MA）來計算真實回報率
                 final_entry_price = last_bt_price if signal == "🔥 強力買入" else past_ma20
                 return_pct = ((latest_today_price - final_entry_price) / final_entry_price) * 100
                 
