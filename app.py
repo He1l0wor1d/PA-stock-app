@@ -217,7 +217,7 @@ if "p_atr" not in st.session_state: st.session_state.p_atr = 1.3
 if "p_rsi" not in st.session_state: st.session_state.p_rsi = 34
 if "p_drop" not in st.session_state: st.session_state.p_drop = 5
 if "p_bias" not in st.session_state: st.session_state.p_bias = 4
-if "strategy_selection" not in st.session_state: st.session_state.strategy_selection = "💎 中等型 (價值)"
+if "strategy_selection" not in st.session_state: st.session_state.strategy_selection = "💎 價值型"
 if "bt_start_date" not in st.session_state: st.session_state.bt_start_date = datetime(2025, 1, 1).date()
 
 selected_strategy = st.sidebar.segmented_control(
