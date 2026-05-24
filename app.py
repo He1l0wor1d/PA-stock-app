@@ -58,7 +58,7 @@ INITIAL_SECTOR_MAP = {
     "CSCO": "光通訊與網通", "ANET": "光通訊與網通", "GLW": "光通訊與網通", "COHR": "光通訊與網通", 
     "LITE": "光通訊與網通", "AAOI": "光通訊與網通", "FN": "光通訊與網通", "CIEN": "光通訊與網通", 
     "NOK": "光通訊與網通",  
-    "MU": "記憶體與儲存", "DRAM": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體與儲存",
+    "MU": "記憶體與儲存", "DRAM": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體儲存",
     "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建", "AEP": "電網設備基建",
     "VRT": "機房液冷散熱", "MOD": "機房液冷散熱", "3017.TW": "機房液冷散熱",
     "CEG": "核能與天然氣", "VST": "核能與天然氣", "SMR": "核能與天然氣", "OKLO": "核能與天然氣",
@@ -87,28 +87,69 @@ INITIAL_SECTOR_MAP = {
 
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
 
-st.sidebar.header("⚙️ 實時清單與自訂網格")
-with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
-    add_ticker = st.text_input("輸入代碼 (美股如: NVDA / 台股如: 2317.TW)").strip().upper()
-    add_sector = st.selectbox("產業分類", sorted(list(set(st.session_state.sector_map.values()))))
-    if st.button("確認新增") and add_ticker:
-        st.session_state.sector_map[add_ticker] = add_sector
+# ==============================================================================
+# 🎮 核心狀態控制區（三種一鍵情境預設按鈕控制）
+# ==============================================================================
+st.sidebar.header("🎯 策略快速情境預設（一鍵切換）")
+
+# 初始化 Session State 預設值，防止重整時參數消失
+if "p_atr" not in st.session_state: st.session_state.p_atr = 1.4
+if "p_rsi" not in st.session_state: st.session_state.p_rsi = 32
+if "p_window" not in st.session_state: st.session_state.p_window = 30
+if "p_drop" not in st.session_state: st.session_state.p_drop = 5
+if "p_bias" not in st.session_state: st.session_state.p_bias = 8
+
+btn_col1, btn_col2, btn_col3 = st.sidebar.columns(3)
+with btn_col1:
+    if st.button("🔥 世紀大底\n(2025/4專用)"):
+        st.session_state.p_atr = 2.0
+        st.session_state.p_rsi = 25
+        st.session_state.p_window = 45
+        st.session_state.p_drop = 8
+        st.session_state.p_bias = 7
         st.rerun()
 
-all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
+with btn_col2:
+    if st.button("💎 價值板塊\n(個股被低估)"):
+        st.session_state.p_atr = 1.4
+        st.session_state.p_rsi = 35
+        st.session_state.p_window = 30
+        st.session_state.p_drop = 5
+        st.session_state.p_bias = 4
+        st.rerun()
 
-st.sidebar.header("📊 對稱網格參數設定")
+with btn_col3:
+    if st.button("⚡ ATR波段\n(快進快出)"):
+        st.session_state.p_atr = 0.8
+        st.session_state.p_rsi = 42
+        st.session_state.p_window = 10
+        st.session_state.p_drop = 2
+        st.session_state.p_bias = 2
+        st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ 觀察名單管理")
+
+# 🛠️ 預設自動幫使用者勾選指定的 8 隻股票：TSM/NVDA/MU/SNDK/LITE/AAOI/AMD/INTC
+default_backtest_8 = ["TSM", "NVDA", "MU", "SNDK", "LITE", "AAOI", "AMD", "INTC"]
+# 確保這 8 隻都有在基礎地圖中
+for tk in default_backtest_8:
+    if tk not in st.session_state.sector_map:
+        st.session_state.sector_map[tk] = "記憶體與儲存" if tk == "SNDK" else "晶圓代工製程"
+
+all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=default_backtest_8)
+
+st.sidebar.header("📊 對稱網格參數微調 (原始手動功能保留)")
 atr_period = 14
 st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天")
-atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, 1.4, 0.1)
-rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (預設32常態賣壓 / 25極端恐慌賣壓)", 15, 45, 32, 1)
 
-wave_window_days = st.sidebar.slider("🛡️ 空間排他時間視窗 (天)", 10, 90, 30, 5)
-min_drop_pct = st.sidebar.slider("📉 視窗內二次強買必備「再跌幅門檻」", 2, 15, 5, 1)
-
-# 🛠️ 修正A的核心精髓：改採個股盤中跌破「200MA 年線」的負乖離率過濾，預設精準定在 8% 
-extreme_ma200_bias = st.sidebar.slider("💥 修正A：盤中跌破年線 (200MA) 負乖離強制解鎖門檻 (%)", 3, 20, 8, 1)
+# 透過 value=st.session_state.xxx 綁定按鈕狀態，同時保留拉桿讓使用者依然能手動調整
+atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, value=st.session_state.p_atr, step=0.1)
+rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制", 15, 45, value=st.session_state.p_rsi, step=1)
+wave_window_days = st.sidebar.slider("🛡️ 空間排他時間視窗 (天)", 10, 90, value=st.session_state.p_window, step=5)
+min_drop_pct = st.sidebar.slider("📉 視窗內二次強買必備「再跌幅門檻」", 2, 15, value=st.session_state.p_drop, step=1)
+extreme_ma200_bias = st.sidebar.slider("💥 修正A：盤中跌破年線 (200MA) 負乖離強制解鎖門檻 (%)", 3, 20, value=st.session_state.p_bias, step=1)
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
@@ -159,7 +200,6 @@ with st.spinner("正在提煉核心決策..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
-            # 盤中最低價插針與技術超賣判定
             low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_multiplier)
             price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
             rsi_cond = df['RSI'] <= rsi_filter_val
@@ -167,22 +207,18 @@ with st.spinner("正在提煉核心決策..."):
             if use_market_filter:
                 raw_panic_signal = raw_panic_signal & df['SPY_Safe']
             
-            # 🛠️ 導入修正A：動態年線負乖離強制破鎖序列演算法
             sparse_strong_buy = pd.Series(False, index=df.index)
             last_buy_date = None
             last_buy_price = None
             
             for date, is_triggered in raw_panic_signal.items():
                 if is_triggered:
-                    # 🛠️ 修正A核心：計算當天最低價相較於 200MA (年線) 的負乖離率
                     if not pd.isna(df.loc[date, 'MA200']):
                         current_ma200_bias = ((df.loc[date, 'MA200'] - df.loc[date, 'Low']) / df.loc[date, 'MA200']) * 100
                     else:
                         current_ma200_bias = 0
                     
-                    # 💥 判定是否為 2025/4 這種世紀關稅利空引發的年線斷崖超跌極值
                     is_ma200_extreme_crash = current_ma200_bias >= extreme_ma200_bias
-                    
                     current_touch_price = min(low_absorb_bound.loc[date], df.loc[date, 'BB_Lower'], df.loc[date, 'Low'])
                     
                     if last_buy_date is None:
@@ -193,7 +229,6 @@ with st.spinner("正在提煉核心決策..."):
                         days_passed = (date - last_buy_date).days
                         
                         if is_ma200_extreme_crash:
-                            # 💥 修正A特權啟動：無視任何短期時間鎖與5%空間限制，強制亮燈狙擊4月史詩大底！
                             sparse_strong_buy[date] = True
                             last_buy_date = date
                             last_buy_price = current_touch_price
@@ -270,7 +305,7 @@ st.header("🚨 今日促銷")
 if action_alerts:
     st.dataframe(pd.DataFrame(action_alerts), use_container_width=True, hide_index=True)
 else:
-    st.info("🧘 報告隊長：今日名單內皆無符合『修正A年線解鎖限制』的促銷標的。")
+    st.info("🧘 報告隊長：今日名單內皆無符合目前情境參數限制的促銷標的。")
 
 st.markdown("---")
 
@@ -325,7 +360,6 @@ if selected_stock:
             if use_market_filter:
                 raw_panic_det = raw_panic_det & df_detail['SPY_Safe']
                 
-            # 圖表端同步執行修正A年線解鎖演算法
             sparse_buy_det = pd.Series(False, index=df_detail.index)
             last_date_det = None
             last_price_det = None
@@ -346,11 +380,11 @@ if selected_stock:
                         last_price_det = current_touch_price_det
                     else:
                         days_passed = (date - last_date_det).days
-                        if is_extreme_crash_det:
+                        if days_passed > wave_window_days:
                             sparse_buy_det[date] = True
                             last_date_det = date
                             last_price_det = current_touch_price_det
-                        elif days_passed > wave_window_days:
+                        elif is_extreme_crash_det:
                             sparse_buy_det[date] = True
                             last_date_det = date
                             last_price_det = current_touch_price_det
@@ -389,48 +423,6 @@ if selected_stock:
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
             st.plotly_chart(fig, use_container_width=True)
-            
-            info = stock_detail.info if stock_detail.info else {}
-            is_tw_detail = ".TW" in selected_stock or ".TWO" in selected_stock
-            
-            rev_growth = info.get('revenueGrowth') or info.get('earningsGrowth') or info.get('earningsQuarterlyGrowth')
-            rev_growth_str = f"{rev_growth * 100:.1f}%" if rev_growth is not None else "未揭露未來指引"
-            
-            capex_str = "未揭露未來指引"
-            guidance_keys = [k for k in info.keys() if any(x in k.lower() for x in ['guidance', 'capex_estimate', 'forward_capex'])]
-            found_forward = False
-            if guidance_keys:
-                forward_val = info.get(guidance_keys[0])
-                if forward_val and str(forward_val).replace('.','').isdigit():
-                    forward_val = float(forward_val)
-                    if not is_tw_detail and forward_val > 10000000000: forward_val /= 32.0
-                    capex_str = f"{forward_val / 100000000:.1f} 億美元" if not is_tw_detail else f"{forward_val / 100000000:.1f} 億新台幣"
-                    found_forward = True
-            
-            if not found_forward:
-                try:
-                    cf = stock_detail.quarterly_cashflow
-                    if cf is None or cf.empty: cf = stock_detail.cashflow
-                    if cf is not None and not cf.empty:
-                        m_keys = [k for k in cf.index if 'Capital Expenditure' in str(k) or 'capital_expenditures' in str(k).lower()]
-                        if m_keys:
-                            latest_raw = abs(cf.loc[m_keys[0]].dropna().iloc[0])
-                            if not is_tw_detail and latest_raw > 10000000000:
-                                latest_raw = latest_raw / 32.0
-                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元"
-                            elif is_tw_detail:
-                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億新台幣"
-                            else:
-                                capex_str = f"約 {latest_raw * 4 / 100000000:.1f} 億美元"
-                except Exception: pass
-            
-            pe_ratio = info.get('trailingPE') or info.get('forwardPE')
-            pe_str = f"{pe_ratio:.1f}" if pe_ratio else "無數據"
-            
-            col_f1, col_f2, col_f3 = st.columns(3)
-            col_f1.metric("2026 全年營收年增率預期 (YoY)", rev_growth_str)
-            col_f2.metric("2026 全年資本支出指引 (CapEx)", capex_str)
-            col_f3.metric("實時估值 (PE Ratio)", pe_str)
                 
     except Exception as e: 
         st.error(f"分析載入失敗: {e}")
@@ -523,7 +515,6 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 
                 is_past_strong_buy = False
                 if is_raw_strong_buy:
-                    # 回測端同步採用修正A：計算相較於年線 200MA 的盤中負乖離率
                     past_ma200_bias = ((past_ma200 - past_low) / past_ma200) * 100 if not pd.isna(past_ma200) else 0
                     is_ma200_extreme_crash_bt = past_ma200_bias >= extreme_ma200_bias
                     
