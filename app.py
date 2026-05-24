@@ -85,10 +85,8 @@ if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_S
 # ==============================================================================
 # 🎮 核心狀態控制區（三種一鍵情境預設按鈕控制）
 # ==============================================================================
-
-
 #st.sidebar.markdown("---")
-st.sidebar.header("⚙️ 觀察名單管理")
+#st.sidebar.header("⚙️ 觀察名單管理")
 
 with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
     add_ticker = st.text_input("輸入代碼 (美股如: NVDA / 台股如: 2317.TW)").strip().upper()
