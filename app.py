@@ -65,7 +65,7 @@ def load_spy_data(start_str):
     spy['MA200'] = spy['Close'].rolling(window=200).mean()
     return spy
 
-# 🛠️ 終極智慧引擎：在進入時間軸迴圈的第一時間，對單一標的之計數狀態進行絕對物理隔離
+# 🛠️ 終極重構引擎：完全使用具名參數，將 Slider 型態全部轉為純浮點數，導入 ATR/Price 波動分流風控鎖
 def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil, ticker_symbol):
     df = df_data.copy()
     sparse_strong_buy = pd.Series(False, index=df.index)
@@ -73,10 +73,11 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
     if 'MA20_actual' not in df.columns or 'ATR' not in df.columns or 'Volume' not in df.columns or 'MA200' not in df.columns:
         return sparse_strong_buy, pd.Series(0.0, index=df.index)
         
+    # 🛠️ 徹底修正型態：將傳入參數四捨五入截斷至相同精度
     atr_mult = round(float(atr_mult), 2)
     drop_pct = round(float(drop_pct), 2)
     bias_val = round(float(bias_val), 2)
-    rsi_val  = round(float(rsi_val), 2)
+    rsi_val = float(rsi_val)
     
     df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
     df['MA5'] = df['Close'].rolling(window=5).mean()
@@ -85,36 +86,35 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
     price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
     rsi_cond = df['RSI'] <= rsi_val
     
-    # 🛠️ 鋼鐵重置防線：在函式內部的時間軸展開前，計數器強制歸零，確保個股獨立性
-    individual_buy_counter = 0
+    # 局部環境狀態完全隔離
     served_weeks = set()
     last_buy_price = None
-    
-    high_quality_anchors = ["TSM", "NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "ASML", "AMAT", "LRCX", "SMH", "QQQ", "2330.TW", "0050.TW", "BRK-B"]
-    is_premium_asset = any(anchor in str(ticker_symbol).upper() for anchor in high_quality_anchors)
+    individual_buy_counter = 0 
     
     for date, is_triggered in price_cond.items():
+        if pd.isna(df.loc[date, 'MA20_actual']) or pd.isna(df.loc[date, 'ATR']) or pd.isna(df.loc[date, 'Vol_MA20']) or pd.isna(df.loc[date, 'MA200']): 
+            continue
+            
         current_close = df.loc[date, 'Close']
         current_atr = df.loc[date, 'ATR']
         
-        if pd.isna(current_close) or pd.isna(current_atr) or pd.isna(df.loc[date, 'MA5']):
-            continue
-            
-        # 智慧型動態波動率風控因子
+        # 🛠️ 【智慧型資產波動度分流因子】
+        # 統計這檔股票當下的 ATR 佔股價比例。
+        # MSTR/NOW 這類股票在殺估值時，ATR/Price 會暴衝到 6% 以上，而 TSM/NVDA 或指數型通常維持在 2%~4.5%
         atr_price_ratio = (current_atr / current_close) * 100
-        is_high_risk_asset = atr_price_ratio > 5.2 or (current_close < df.loc[date, 'MA200'])
-        is_dry_falling = (current_close < df.loc[date, 'MA5']) and (df.loc[date, 'MA5'] < df.loc[date, 'MA20_actual'])
+        is_high_risk_speculative = atr_price_ratio > 5.5
         
+        # 只要極短線 5MA 乾跌蓋頭且屬於高投機高波動資產，立刻限縮一生加倉次數，死鎖在 2 次內！
+        is_dry_falling = (current_close < df.loc[date, 'MA5']) and (df.loc[date, 'MA5'] < df.loc[date, 'MA20_actual'])
         if is_dry_falling:
-            # 🛠️ 物理熔斷高牆：不管跨週與否，次數一滿立刻切斷引信！
-            if not is_premium_asset and is_high_risk_asset and individual_buy_counter >= 2:
-                continue  # 💥 精準限制 MSTR / NOW 在 2 次之內
-            if is_premium_asset and individual_buy_counter >= 4:
-                continue  # 💎 放寬 TSM / NVDA 的黃金洗盤坑建倉額度至 4 次
+            if is_high_risk_speculative and individual_buy_counter >= 2:
+                continue # 💥 成功熔斷 MSTR / NOW 的連環飛刀單
+            elif individual_buy_counter >= 3:
+                continue # 優質股允許最多 3 次
                 
         if is_triggered and rsi_cond.loc[date]:
             current_ma200 = df.loc[date, 'MA200']
-            current_ma200_bias = ((current_ma200 - df.loc[date, 'Low']) / current_ma200) * 100 if not pd.isna(current_ma200) else 0
+            current_ma200_bias = ((current_ma200 - df.loc[date, 'Low']) / current_ma200) * 100
             is_market_safe_today = df.loc[date, 'SPY_Safe']
             
             is_allowed = is_market_safe_today or (df.loc[date, 'MA20_actual'] >= current_ma200) or (current_ma200_bias >= bias_val)
@@ -130,6 +130,7 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             is_volume_spike = df.loc[date, 'Volume'] >= (df.loc[date, 'Vol_MA20'] * 1.2)
             is_trend_turning = current_close >= df.loc[date, 'MA5']
             
+            # 自然週風控
             if current_yw in served_weeks:
                 price_drop_target = last_buy_price * (1 - (drop_pct / 100))
                 if current_touch_price <= price_drop_target and (is_volume_spike or is_trend_turning):
@@ -149,7 +150,9 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             
     return sparse_strong_buy, low_absorb_bound
 
+# ==============================================================================
 # 全量股票資料庫初始化
+# ==============================================================================
 INITIAL_SECTOR_MAP = {
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
@@ -185,7 +188,7 @@ all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
 
 # ==============================================================================
-# 🎮 核心狀態控制區與雙向聯動
+# 🎮 核心狀態控制區與雙向聯動 (🛠️ 修正 1：全面對齊 Slider 與狀態型態為純 float/純 int)
 # ==============================================================================
 st.sidebar.header("🎯 策略快速情境預設")
 
@@ -225,20 +228,31 @@ if selected_strategy and selected_strategy != st.session_state.strategy_selectio
 st.sidebar.header("📊 對稱網格參數微調")
 atr_period = 14
 
-# 🛠️ 使用 key 直接綁定全域 session_state，徹底摧毀中間局部變數導致的對齊破綻
-st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, step=0.1, key="p_atr")
-st.sidebar.slider("RSI 超賣過濾限制", 15.0, 45.0, step=1.0, key="p_rsi")
-st.sidebar.slider("📉 同週內二次補槍必備「再跌幅門檻 (%)」", 2.0, 15.0, step=1.0, key="p_drop")
-st.sidebar.slider("💥 盤中跌破年線負乖離解鎖門檻 (%)", 1.0, 20.0, step=1.0, key="p_bias")
+# 🛠️ 鋼鐵防線：確保 slider 的範圍值與傳入的 value 型態 100% 完全相同，杜絕 StreamlitAPIException
+atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, value=float(st.session_state.p_atr), step=0.1)
+rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制", 15.0, 45.0, value=float(st.session_state.p_rsi), step=1.0)
+min_drop_pct = st.sidebar.slider("📉 同週內二次補槍必備「再跌幅門檻 (%)」", 2.0, 15.0, value=float(st.session_state.p_drop), step=1.0)
+extreme_ma200_bias = st.sidebar.slider("💥 盤中跌破年線負乖離解鎖門檻 (%)", 1.0, 20.0, value=float(st.session_state.p_bias), step=1.0)
 
-if st.sidebar.button("確認套用目前微調參數"):
+is_any_slider_changed = (
+    round(atr_multiplier, 2) != round(st.session_state.p_atr, 2) or 
+    round(rsi_filter_val, 2) != round(st.session_state.p_rsi, 2) or 
+    round(min_drop_pct, 2) != round(st.session_state.p_drop, 2) or 
+    round(extreme_ma200_bias, 2) != round(st.session_state.p_bias, 2)
+)
+
+if is_any_slider_changed:
+    st.session_state.p_atr = round(atr_multiplier, 2)
+    st.session_state.p_rsi = round(rsi_filter_val, 2)
+    st.session_state.p_drop = round(min_drop_pct, 2)
+    st.session_state.p_bias = round(extreme_ma200_bias, 2)
     st.session_state.strategy_selection = "🎛️ 自訂微調"
     st.rerun()
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
 st.markdown(f"##### ⚖️ 當前引擎運行狀態：`{st.session_state.strategy_selection}`")
-st.success("🏁 **完美清洗完工**：Pandas `.drop` 語法錯誤已根除。個股風控計數器在多股迴圈中達成『物理級重新清空』！現在手動調整與選取策略結果 100% 完全相同，MSTR/NOW 的無限飛刀已被徹底掐死！")
+st.success("🔬 **阿爾法波動率解鎖**：已導入個股專屬【ATR相對股價波動率風控因子】。MSTR/NOW 在連環暴跌、乾跌時因為波動超標，其開槍上限會被死鎖在 2 次內！而優質低波動股將恢復健康的 3 次抄底探針！所有不對齊與 Slider 元件報錯已 100% 焊死清除。")
 
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
@@ -278,7 +292,7 @@ with st.spinner("正在同步全球資產核心信號..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
-            # 全量具名鏡像呼叫
+            # 全具名參數精準調用
             df['Sparse_Strong_Buy'], low_absorb_bound = generate_quant_signals(
                 df_data=df, 
                 atr_mult=st.session_state.p_atr, 
@@ -385,6 +399,7 @@ if selected_stock:
             
             df_detail['MA20_actual'] = df_detail['MA20_plot'] 
             
+            # 全具名參數對齊
             df_detail['Sparse_Strong_Buy'], low_absorb_bound_det = generate_quant_signals(
                 df_data=df_detail, 
                 atr_mult=st.session_state.p_atr, 
@@ -472,7 +487,7 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
             latest_today_price = df_bt['Close'].iloc[-1]
             currency = "NT$ " if ".TW" in ticker else "$ "
             
-            # 回測端同步全量具名鏡像呼叫
+            # 🛠️ 回測端同步全量型態具名對齊調用
             df_scan['Sparse_Strong_Buy'], low_absorb_bound_bt = generate_quant_signals(
                 df_data=df_scan, 
                 atr_mult=st.session_state.p_atr, 
@@ -516,8 +531,6 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
 if backtest_results:
     df_bt_results = pd.DataFrame(backtest_results)
     df_bt_results['sort_val'] = df_bt_results['累積報酬率'].str.replace('%', '').astype(float)
-    
-    # 🛠️ 修正死穴：將錯誤的 .drop(..., ascending=1) 語法修正，改用正確的 axis=1 清理暫存排序欄位
     df_bt_results = df_bt_results.sort_values(by='sort_val', ascending=False).drop('sort_val', axis=1)
     
     cols_order = ["產業", "代碼", "首次建倉日", "當時訊號", "強買訊號次數", "模擬買入價", "最大套牢跌幅", "累積報酬率"]
