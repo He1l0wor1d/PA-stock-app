@@ -60,7 +60,7 @@ with salp_col1:
     st.info("💡 **SALP 觀點**：AI 發展最大限制是「天然氣產量」與「變壓器交付」。AI 必須插電，電力層是未來硬資產。")
 
 with salp_col2:
-    st.markdown("##### 🏦 SALP 基金敘事層級持倉")
+    st.markdown("##### 🏦 SALP 基金敘事層級持仓")
     salp_data = {
         "敘事層級": ["⚡ 電力層 (Power)", "☁️ AI 雲端 (AI Cloud)", "🌐 光通訊 (Photonics)", "🖥️ 運算層 (Compute)"],
         "代表標的": ["BE, CEG, VST", "CRWV, CORZ, IREN", "GLW, COHR", "NVDA, SMH, TSM"],
@@ -87,7 +87,7 @@ def load_spy_data(start_str):
     spy['MA200'] = spy['Close'].rolling(window=200).mean()
     return spy
 
-# 核心交易訊號生成器：一視同仁，完全由滑桿引信與自然週限購盾驅動
+# 🛠️ 核心重構：加入「實時趨勢認錯機制」的終極量化引擎
 def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil):
     df = df_data.copy()
     sparse_strong_buy = pd.Series(False, index=df.index)
@@ -100,7 +100,7 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
     rsi_cond = df['RSI'] <= rsi_val
     
     served_weeks = set()
-    last_buy_price = None
+    first_buy_price = None  # 追蹤第一槍進場價格成本
     
     for date, is_triggered in price_cond.items():
         if is_triggered and rsi_cond.loc[date]:
@@ -128,7 +128,15 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             current_year, current_week, _ = date.isocalendar()
             current_yw = (current_year, current_week)
             
-            # 自然週鋼鐵限購盾
+            # 🛠️ 【實時認錯制死鎖】
+            # 如果之前已經開過第一槍，但現在股價非但沒反彈，反而跌破第一槍成本，且月線（MA20）方向下墜
+            # 系統立刻判定為「買錯了」，強制鎖死、不准再補槍！直到股價重新站回月線之上。
+            if first_buy_price is not None:
+                is_stock_falling_abyss = (current_touch_price < first_buy_price) and (df.loc[date, 'MA20_actual'] < df.loc[date, 'MA200'])
+                if is_stock_falling_abyss and (df.loc[date, 'Close'] < df.loc[date, 'MA20_actual']):
+                    continue  # 💥 實時認錯！直接跳過，SOFI/NOW 在這裡會被強制鎖在第一槍
+            
+            # 自然週限購盾
             if current_yw in served_weeks:
                 price_drop_target = last_buy_price * (1 - (drop_pct / 100))
                 if current_touch_price <= price_drop_target:
@@ -136,13 +144,18 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
                     last_buy_price = current_touch_price
                 continue
             
+            # 第一槍建倉，鎖定初始成本價
             sparse_strong_buy[date] = True
             served_weeks.add(current_yw)
             last_buy_price = current_touch_price
+            if first_buy_price is None:
+                first_buy_price = current_touch_price  # 錨定認錯基準線
             
     return sparse_strong_buy, low_absorb_bound
 
-# 全量股票資料庫
+# ==============================================================================
+# 全量股票資料庫初始化
+# ==============================================================================
 INITIAL_SECTOR_MAP = {
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
@@ -163,7 +176,7 @@ INITIAL_SECTOR_MAP = {
     "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", "2382.TW": "AI巨頭與軟體", "CBRS": "AI巨頭與軟體",
     "ARKX": "航太太空國防", "NASA": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
     "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", "ONDS": "航太太空國防",
-    "XOM": "傳統能源礦产", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
+    "XOM": "傳統能源礦產", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
     "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技",
     "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
     "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理",
@@ -187,7 +200,6 @@ if "p_rsi" not in st.session_state: st.session_state.p_rsi = 34
 if "p_drop" not in st.session_state: st.session_state.p_drop = 5
 if "p_bias" not in st.session_state: st.session_state.p_bias = 4
 if "strategy_selection" not in st.session_state: st.session_state.strategy_selection = "💎 中等型 (價值)"
-# 🛠️ 核心修正：將「回測起始日期」寫入全域狀態記憶體中，預設為 2025/01/01
 if "bt_start_date" not in st.session_state: st.session_state.bt_start_date = datetime(2025, 1, 1).date()
 
 selected_strategy = st.sidebar.segmented_control(
@@ -242,7 +254,7 @@ if is_any_slider_changed:
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
 st.markdown(f"##### ⚖️ 當前引擎運行狀態：`{st.session_state.strategy_selection}` (滑桿參數：ATR {st.session_state.p_atr}x / RSI {st.session_state.p_rsi} / 再跌門檻 {st.session_state.p_drop}% / 年線負乖離 {st.session_state.p_bias}%)")
-st.caption("💡 量化引擎已完全解耦。所有策略判定 100% 只依據滑桿絕對數值，絕無隱藏額外限制，保證各策略與特調引信完全一視同仁。")
+st.caption("💡 量化引擎已完全解耦。【🚀 實時認錯熔斷盾已熔接進底層】只要第一槍買錯且跌穿成本，後續加倉引信永久鎖死，完美封印 SOFI / NOW 密集密集飛刀雜訊。")
 
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
@@ -282,6 +294,7 @@ with st.spinner("正在同步全球資產核心信號..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
+            # 使用解耦且具備認錯機制的模組
             df['Sparse_Strong_Buy'], low_absorb_bound = generate_quant_signals(
                 df, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
@@ -404,14 +417,13 @@ if selected_stock:
     except Exception as e: st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
-# ⏳ 策略回測績效驗證 (🛠️ 狀態記憶升級版)
+# ⏳ 策略回測績效驗證
 # ==============================================================================
 st.markdown("---")
 st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
 
 backtest_col1, backtest_col2, _ = st.columns([1, 1, 2])
 with backtest_col1:
-    # 🛠️ 核心修正：將日期元件綁定到 st.session_state 全域記憶體上，徹底防止按鈕點擊時時光倒流
     user_date_selection = st.date_input("📅 選擇掃描起始日期：", value=st.session_state.bt_start_date, key="bt_date_input")
     if user_date_selection != st.session_state.bt_start_date:
         st.session_state.bt_start_date = user_date_selection
@@ -420,7 +432,6 @@ with backtest_col1:
 with backtest_col2:
     signal_choice = st.selectbox("🎯 選擇回測訊號類型：", options=["單獨強力買入", "單獨買入", "買入 + 強力買入"], index=0)
 
-# 使用完全被鎖定的全域日期狀態進行回測時間軸切片
 bt_date_str = st.session_state.bt_start_date.strftime('%Y-%m-%d')
 backtest_results = []
 portfolio_total_buy_signals = 0 
@@ -437,7 +448,6 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
     for ticker in active_tickers:
         try:
             ticker_sector = INITIAL_SECTOR_MAP.get(ticker, "未分類")
-            # 確保歷史波段與均線緩衝
             df_bt = yf.Ticker(ticker).history(start=(st.session_state.bt_start_date - timedelta(days=300)).strftime('%Y-%m-%d'))
             if df_bt.empty or len(df_bt) < 240: continue
             
@@ -465,6 +475,7 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
             latest_today_price = df_bt['Close'].iloc[-1]
             currency = "NT$ " if ".TW" in ticker else "$ "
             
+            # 回測同步認錯引擎
             df_scan['Sparse_Strong_Buy'], low_absorb_bound_bt = generate_quant_signals(
                 df_scan, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
