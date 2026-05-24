@@ -104,9 +104,9 @@ st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天（精簡標
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, 1.4, 0.1)
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制 (預設32常態賣壓 / 25極端恐慌賣壓)", 15, 45, 32, 1)
 
-# 🛠️ 時間視窗優化：冷卻保護鎖改為「同一個波段/一個月內」才限制，避免限制到長線幾年後的高位暴跌
-wave_window_days = st.sidebar.slider("🛡️ 空間排他時間視窗 (天) [在此天數內執行空間破底限制，超過則解鎖]", 10, 90, 30, 5)
+wave_window_days = st.sidebar.slider("🛡️ 空間排他時間視窗 (天)", 10, 90, 30, 5)
 min_drop_pct = st.sidebar.slider("📉 視窗內二次強買必備「再跌幅門檻」", 2, 15, 5, 1)
+extreme_bias_pct = st.sidebar.slider("💥 斷崖暴跌偏離強制解鎖門檻 (相較20MA負乖離%)", 10, 25, 14, 1)
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
@@ -143,25 +143,12 @@ with st.spinner("正在提煉核心決策..."):
             df = stock.history(start=start_date)
             if df.empty or len(df) < 220: continue
             
-            info = stock.info if stock.info else {}
-            target_low = info.get('targetLowPrice')
-            target_mean = info.get('targetMeanPrice')
-            target_high = info.get('targetHighPrice')
-            
-            fair_value_str = "數據不足"
-            if target_mean:
-                if target_low and target_high and (target_low != target_high):
-                    fair_value_str = f"{currency_symbol}{target_low:.1f} ~ {target_high:.1f} (均值:{target_mean:.1f})"
-                else:
-                    fair_value_str = f"{currency_symbol}{target_mean:.1f}"
-
             high_low = df['High'] - df['Low']
             tr = pd.concat([high_low, (df['High'] - df['Close'].shift(1)).abs(), (df['Low'] - df['Close'].shift(1)).abs()], axis=1).max(axis=1)
             df['ATR'] = tr.rolling(window=atr_period).mean()
             df['MA20_actual'] = df['Close'].rolling(window=20).mean()
             df['MA200'] = df['Close'].rolling(window=200).mean()
             df['STD20'] = df['Close'].rolling(window=20).std()
-            df['BB_Upper'] = df['MA20_actual'] + (2 * df['STD20'])
             df['BB_Lower'] = df['MA20_actual'] - (2 * df['STD20'])
             df['RSI'] = calculate_rsi(df['Close'], 14)
             
@@ -170,38 +157,48 @@ with st.spinner("正在提煉核心決策..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
-            price_cond = (df['Close'] <= (df['MA20_actual'] - (df['ATR'] * atr_multiplier))) | (df['Close'] <= df['BB_Lower'])
+            # 🛠️ 即時面板同步優化：採用當日最低價 Low 判定是否盤中插針觸及臨界點
+            low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_multiplier)
+            price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
             rsi_cond = df['RSI'] <= rsi_filter_val
             raw_panic_signal = rsi_cond & price_cond & (df['SPY_Safe'] | (df['MA20_actual'] >= df['MA200']))
             if use_market_filter:
                 raw_panic_signal = raw_panic_signal & df['SPY_Safe']
             
-            # 🛠️ 升級版動態波段稀疏化演算法：引進動態時間視窗衰退鎖
             sparse_strong_buy = pd.Series(False, index=df.index)
             last_buy_date = None
             last_buy_price = None
             
             for date, is_triggered in raw_panic_signal.items():
                 if is_triggered:
+                    # 🛠️ 負乖離率同樣改採盤中最低價 Low 計算極值
+                    current_bias = ((df.loc[date, 'MA20_actual'] - df.loc[date, 'Low']) / df.loc[date, 'MA20_actual']) * 100
+                    is_extreme_crash = current_bias >= extreme_bias_pct
+                    
+                    # 以盤中理論上能買到的最優限價或最低價做為回測買入基準價
+                    current_touch_price = min(low_absorb_bound.loc[date], df.loc[date, 'BB_Lower'], df.loc[date, 'Low'])
+                    
                     if last_buy_date is None:
                         sparse_strong_buy[date] = True
                         last_buy_date = date
-                        last_buy_price = df.loc[date, 'Close']
+                        last_buy_price = current_touch_price
                     else:
                         days_passed = (date - last_buy_date).days
                         
-                        # 核心修復邏輯：如果已經跨出同一個下跌波段（例如大於30天），價格鎖失效，直接放行
-                        if days_passed > wave_window_days:
+                        if is_extreme_crash:
                             sparse_strong_buy[date] = True
                             last_buy_date = date
-                            last_buy_price = df.loc[date, 'Close']
+                            last_buy_price = current_touch_price
+                        elif days_passed > wave_window_days:
+                            sparse_strong_buy[date] = True
+                            last_buy_date = date
+                            last_buy_price = current_touch_price
                         else:
-                            # 如果在 30 天的同一個短線波段內，嚴格執行「收盤價必須比上一次亮燈再跌破 X%」的空間排他
                             price_drop_target = last_buy_price * (1 - (min_drop_pct / 100))
-                            if df.loc[date, 'Close'] <= price_drop_target:
+                            if current_touch_price <= price_drop_target:
                                 sparse_strong_buy[date] = True
                                 last_buy_date = date
-                                last_buy_price = df.loc[date, 'Close']
+                                last_buy_price = current_touch_price
 
             df['Sparse_Strong_Buy'] = sparse_strong_buy
             
@@ -250,13 +247,12 @@ with st.spinner("正在提煉核心決策..."):
                     "市場狀態": market_state, 
                     "當前股價": f"{currency_symbol}{current_price:.1f}",
                     "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}",
-                    "公允價值區間": fair_value_str, 
                     "MA20": f"{currency_symbol}{ma20_center:.1f}"
                 })
 
             summary_data.append({
                 "產業領域": ticker_sector, "代碼": ticker, "當前股價": f"{currency_symbol}{current_price:.1f}",
-                "公允價值區間": fair_value_str, "移動停利價位": trailing_stop_str, "昨收盤價": f"{currency_symbol}{yesterday_close:.1f}",
+                "移動停利價位": trailing_stop_str, "昨收盤價": f"{currency_symbol}{yesterday_close:.1f}",
                 "MA20": f"{currency_symbol}{ma20_center:.1f}", "市場狀態": market_state, "綜合建議": final_action,
                 "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}"
             })
@@ -266,7 +262,7 @@ st.header("🚨 今日促銷")
 if action_alerts:
     st.dataframe(pd.DataFrame(action_alerts), use_container_width=True, hide_index=True)
 else:
-    st.info("🧘 報告隊長：今日名單內皆無符合『動態波段濾網』限制的促銷標的。")
+    st.info("🧘 報告隊長：今日名單內皆無符合『盤中插針與動態過濾限制』的促銷標的。")
 
 st.markdown("---")
 
@@ -315,35 +311,40 @@ if selected_stock:
             df_detail['SPY_Safe'] = df_detail['SPY_Close'] >= df_detail['SPY_MA200']
             df_detail['SPY_Safe'] = df_detail['SPY_Safe'].fillna(True)
             
-            price_cond = (df_detail['Close'] <= df_detail['Low_Absorb']) | (df_detail['Close'] <= df_detail['BB_Lower'])
+            # 🛠️ 圖表端同步修正：採用 Low 判定插針觸發
+            price_cond = (df_detail['Low'] <= df_detail['Low_Absorb']) | (df_detail['Low'] <= df_detail['BB_Lower'])
             rsi_cond = df_detail['RSI'] <= rsi_filter_val
             raw_panic_det = rsi_cond & price_cond & (df_detail['SPY_Safe'] | (df_detail['MA20_plot'] >= df_detail['MA200']))
             if use_market_filter:
                 raw_panic_det = raw_panic_det & df_detail['SPY_Safe']
                 
-            # 圖表端同步套用動態時間視窗衰退鎖
             sparse_buy_det = pd.Series(False, index=df_detail.index)
             last_date_det = None
             last_price_det = None
             
             for date, is_triggered in raw_panic_det.items():
                 if is_triggered:
+                    current_bias_det = ((df_detail.loc[date, 'MA20_plot'] - df_detail.loc[date, 'Low']) / df_detail.loc[date, 'MA20_plot']) * 100
+                    is_extreme_crash_det = current_bias_det >= extreme_bias_pct
+                    
+                    current_touch_price_det = min(df_detail.loc[date, 'Low_Absorb'], df_detail.loc[date, 'BB_Lower'], df_detail.loc[date, 'Low'])
+                    
                     if last_date_det is None:
                         sparse_buy_det[date] = True
                         last_date_det = date
-                        last_price_det = df_detail.loc[date, 'Close']
+                        last_price_det = current_touch_price_det
                     else:
                         days_passed = (date - last_date_det).days
                         if days_passed > wave_window_days:
                             sparse_buy_det[date] = True
                             last_date_det = date
-                            last_price_det = df_detail.loc[date, 'Close']
+                            last_price_det = current_touch_price_det
                         else:
                             price_drop_target = last_price_det * (1 - (min_drop_pct / 100))
-                            if df_detail.loc[date, 'Close'] <= price_drop_target:
+                            if current_touch_price_det <= price_drop_target:
                                 sparse_buy_det[date] = True
                                 last_date_det = date
-                                last_price_det = df_detail.loc[date, 'Close']
+                                last_price_det = current_touch_price_det
 
             df_detail['Sparse_Strong_Buy'] = sparse_buy_det
             buy_signals = df_detail[df_detail['Sparse_Strong_Buy']]
@@ -424,7 +425,7 @@ if selected_stock:
 # ==============================================================================
 st.markdown("---")
 st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
-st.markdown("從您指定的日期開始往後掃描，找出每一檔股票**「第一次」觸發指定訊號的日子與價位**，並對比今日收盤價，驗證策略真實報酬率！")
+st.markdown("從您指定的日期開始往後掃描，找出每一檔股票**「第一次」盤中觸發指定訊號的日子與成交價**，並對比今日收盤價，驗證策略真實報酬率！")
 
 backtest_col1, backtest_col2, _ = st.columns([1, 1, 2])
 with backtest_col1:
@@ -480,6 +481,7 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
             
             for date, row in df_scan.iterrows():
                 past_close = row['Close']
+                past_low = row['Low']
                 past_ma20 = row['MA20']
                 past_ma200 = row['MA200'] if not pd.isna(row['MA200']) else past_ma20
                 past_atr = row['ATR']
@@ -498,31 +500,42 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 else:
                     is_market_safe_past = True
                 
-                is_raw_strong_buy = (past_close <= low_b or past_close <= past_bb_lower) and past_rsi <= rsi_filter_val and (is_market_safe_past or (past_ma20 >= past_ma200))
+                # 🛠️ 回測核心修正：改採盤中最低點 Low 判定是否成功跨越網格或布林臨界點
+                is_raw_strong_buy = (past_low <= low_b or past_low <= past_bb_lower) and past_rsi <= rsi_filter_val and (is_market_safe_past or (past_ma20 >= past_ma200))
                 if use_market_filter and not is_market_safe_past:
                     is_raw_strong_buy = False
                     
-                # 回測端同步套用升級版：跨波段解鎖機制
+                # 盤中限價或插針理論上能買到的最優真實價位
+                bt_touch_price = min(low_b, past_bb_lower, past_low)
+                
                 is_past_strong_buy = False
                 if is_raw_strong_buy:
+                    past_bias = ((past_ma20 - past_low) / past_ma20) * 100
+                    is_extreme_crash_bt = past_bias >= extreme_bias_pct
+                    
                     if last_bt_date is None:
                         is_past_strong_buy = True
                         last_bt_date = date
-                        last_bt_price = past_close
+                        last_bt_price = bt_touch_price
                     else:
                         days_passed = (date - last_bt_date).days
-                        if days_passed > wave_window_days:
+                        if is_extreme_crash_bt:
                             is_past_strong_buy = True
                             last_bt_date = date
-                            last_bt_price = past_close
+                            last_bt_price = bt_touch_price
+                        elif days_passed > wave_window_days:
+                            is_past_strong_buy = True
+                            last_bt_date = date
+                            last_bt_price = bt_touch_price
                         else:
                             price_drop_target = last_bt_price * (1 - (min_drop_pct / 100))
-                            if past_close <= price_drop_target:
+                            if bt_touch_price <= price_drop_target:
                                 is_past_strong_buy = True
                                 last_bt_date = date
-                                last_bt_price = past_close
+                                last_bt_price = bt_touch_price
                 
-                is_past_normal_buy = abs(past_close - past_ma20) / past_ma20 <= 0.02
+                # 普通買入（回試20MA）同樣改採 Low 判定是否觸及
+                is_past_normal_buy = abs(past_low - past_ma20) / past_ma20 <= 0.02
                 
                 signal = None
                 if signal_choice == "買入 + 強力買入":
@@ -534,12 +547,15 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                     signal = "🔥 強力買入"
                 
                 if signal is None: continue 
-                    
-                return_pct = ((latest_today_price - past_close) / past_close) * 100
+                
+                # 採用盤中實際能撈到的最優建倉價位（`last_bt_price` 或 20MA）來計算真實回報率
+                final_entry_price = last_bt_price if signal == "🔥 強力買入" else past_ma20
+                return_pct = ((latest_today_price - final_entry_price) / final_entry_price) * 100
+                
                 backtest_results.append({
                     "產業": ticker_sector, "代碼": ticker,
                     "建倉日期": date.strftime('%Y-%m-%d'), "當時訊號": signal,
-                    "買入價": f"{currency}{past_close:.1f}", "今日最新價": f"{currency}{latest_today_price:.1f}",
+                    "買入價": f"{currency}{final_entry_price:.1f}", "今日最新價": f"{currency}{latest_today_price:.1f}",
                     "累積報酬率": f"{return_pct:.1f}%"
                 })
                 break 
