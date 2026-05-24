@@ -87,7 +87,7 @@ if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_S
 # ==============================================================================
 
 
-st.sidebar.markdown("---")
+#st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 觀察名單管理")
 
 with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
