@@ -128,7 +128,7 @@ with btn_col2:
         st.rerun()
 
 with btn_col3:
-    if st.button("⚡ 短期波段:
+    if st.button("⚡ 短期波段"):
         st.session_state.p_atr = 1.0
         st.session_state.p_rsi = 42
         st.session_state.p_window = 50
