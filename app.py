@@ -85,6 +85,22 @@ if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_S
 # ==============================================================================
 # 🎮 核心狀態控制區（三種一鍵情境預設按鈕控制）
 # ==============================================================================
+
+
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ 觀察名單管理")
+
+with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
+    add_ticker = st.text_input("輸入代碼 (美股如: NVDA / 台股如: 2317.TW)").strip().upper()
+    add_sector = st.selectbox("產業分類", sorted(list(set(st.session_state.sector_map.values()))))
+    if st.button("確認新增") and add_ticker:
+        st.session_state.sector_map[add_ticker] = add_sector
+        st.rerun()
+
+all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
+
+
 st.sidebar.header("🎯 策略快速情境預設（一鍵切換）")
 
 if "p_atr" not in st.session_state: st.session_state.p_atr = 1.4
@@ -120,23 +136,9 @@ with btn_col3:
         st.session_state.p_drop = 2
         st.session_state.p_bias = 2
         st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.header("⚙️ 觀察名單管理")
-
-with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
-    add_ticker = st.text_input("輸入代碼 (美股如: NVDA / 台股如: 2317.TW)").strip().upper()
-    add_sector = st.selectbox("產業分類", sorted(list(set(st.session_state.sector_map.values()))))
-    if st.button("確認新增") and add_ticker:
-        st.session_state.sector_map[add_ticker] = add_sector
-        st.rerun()
-
-all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
-
 st.sidebar.header("📊 對稱網格參數微調")
 atr_period = 14
-st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天")
+#st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天")
 
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, value=st.session_state.p_atr, step=0.1)
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制", 15, 45, value=st.session_state.p_rsi, step=1)
