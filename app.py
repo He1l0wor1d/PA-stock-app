@@ -434,7 +434,7 @@ with backtest_col1:
 with backtest_col2:
     signal_choice = st.selectbox(
         "🎯 選擇回測訊號類型：",
-        options=["買入 + 強力買入", "單獨買入", "單獨強力買入"],
+        options=["單獨強力買入", "單獨買入", "買入 + 強力買入"],
         index=0
     )
 
