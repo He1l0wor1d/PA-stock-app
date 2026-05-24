@@ -218,7 +218,7 @@ if "p_rsi" not in st.session_state: st.session_state.p_rsi = 34
 if "p_drop" not in st.session_state: st.session_state.p_drop = 5
 if "p_bias" not in st.session_state: st.session_state.p_bias = 4
 if "strategy_selection" not in st.session_state: st.session_state.strategy_selection = "💎 價值型"
-if "bt_start_date" not in st.session_state: st.session_state.bt_start_date = datetime(2025, 1, 1).date()
+if "bt_start_date" not in st.session_state: st.session_state.bt_start_date = datetime(2026, 1, 1).date()
 
 selected_strategy = st.sidebar.segmented_control(
     "選擇運行策略：",
@@ -251,8 +251,8 @@ atr_period = 14
 
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, value=st.session_state.p_atr, step=0.1)
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制", 15, 45, value=st.session_state.p_rsi, step=1)
-min_drop_pct = st.sidebar.slider("📉 同週內二次補槍必備「再跌幅門檻 (%)」", 2, 15, value=st.session_state.p_drop, step=1)
-extreme_ma200_bias = st.sidebar.slider("💥 盤中跌破年線負乖離解鎖門檻 (%)", 3, 20, value=st.session_state.p_bias, step=1)
+min_drop_pct = st.sidebar.slider("📉 攤平「再跌幅門檻 (%)」", 2, 15, value=st.session_state.p_drop, step=1)
+extreme_ma200_bias = st.sidebar.slider("💥 跌破年線負乖離門檻 (%)", 3, 20, value=st.session_state.p_bias, step=1)
 
 is_any_slider_changed = (
     atr_multiplier != st.session_state.p_atr or 
