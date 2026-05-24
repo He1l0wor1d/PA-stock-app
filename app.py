@@ -72,7 +72,7 @@ with salp_col2:
 st.markdown("---")
 
 # ==============================================================================
-# 🧮 基礎核心數學指標與資料加載函式 (徹底解決 NameError)
+# 🧮 基礎核心數學指標與資料加載函式 (100% 防禦 NameError 與 空值污染)
 # ==============================================================================
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -92,6 +92,10 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
     df = df_data.copy()
     sparse_strong_buy = pd.Series(False, index=df.index)
     
+    # 防止均線未成形時的空值干擾
+    if 'MA20_actual' not in df.columns or 'ATR' not in df.columns:
+        return sparse_strong_buy, pd.Series(0.0, index=df.index)
+        
     low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_mult)
     price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
     rsi_cond = df['RSI'] <= rsi_val
@@ -101,6 +105,9 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
     
     for date, is_triggered in price_cond.items():
         if is_triggered and rsi_cond.loc[date]:
+            if pd.isna(df.loc[date, 'MA20_actual']) or pd.isna(df.loc[date, 'ATR']): 
+                continue
+                
             if not pd.isna(df.loc[date, 'MA200']):
                 current_ma200_bias = ((df.loc[date, 'MA200'] - df.loc[date, 'Low']) / df.loc[date, 'MA200']) * 100
             else: current_ma200_bias = 0
@@ -112,7 +119,7 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             if use_market_fil and not is_market_safe_today and not is_ma200_extreme_crash:
                 is_allowed = False
                 
-            # 一視同仁前置濾網：前日收盤必須高於年線
+            # 一視同仁前置多頭濾網：前日收盤必須高於年線
             if not df.loc[date, 'Is_True_Bull_Before']:
                 is_allowed = False
                 
@@ -122,7 +129,7 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             current_year, current_week, _ = date.isocalendar()
             current_yw = (current_year, current_week)
             
-            # 自然週熔斷限購
+            # 自然週鋼鐵熔斷限購機制
             if current_yw in served_weeks:
                 price_drop_target = last_buy_price * (1 - (drop_pct / 100))
                 if current_touch_price <= price_drop_target:
@@ -236,14 +243,14 @@ if is_any_slider_changed:
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
 st.markdown(f"##### ⚖️ 當前引擎運行狀態：`{st.session_state.strategy_selection}` (滑桿參數：ATR {st.session_state.p_atr}x / RSI {st.session_state.p_rsi} / 再跌門檻 {st.session_state.p_drop}% / 年線負乖離 {st.session_state.p_bias}%)")
-st.caption("💡 量化引擎已完全解耦。所有策略判定100%只依據滑桿絕對數值，絕無隱藏額外限制，保證各策略與特調引信完全一視同仁。")
+st.caption("💡 量化引擎已完全解耦。所有策略判定 100% 只依據滑桿絕對數值，絕無隱藏額外限制，保證各策略與特調引信完全一視同仁。")
 
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
 action_alerts = []
 action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 賣出": 3, "🚨 強力賣出": 4}
 
-# 🚀 執行 SPY 加載 (現在絕不會報錯了)
+# 🚀 載入大盤 SPY 資料庫
 spy_df_global = load_spy_data(start_date)
 
 # ==============================================================================
@@ -277,7 +284,7 @@ with st.spinner("正在同步全球資產核心信號..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
-            # 使用解耦模組
+            # 使用解耦模組判定訊號
             df['Sparse_Strong_Buy'], low_absorb_bound = generate_quant_signals(
                 df, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
@@ -376,7 +383,8 @@ if selected_stock:
             df_detail['SPY_Safe'] = df_detail['SPY_Close'] >= df_detail['SPY_MA200']
             df_detail['SPY_Safe'] = df_detail['SPY_Safe'].fillna(True)
             
-            # 調用解耦函數
+            # 使用解耦模組，代入當前滑桿參數
+            df_detail['MA20_actual'] = df_detail['MA20_plot'] # 變數名稱對齊
             df_detail['Sparse_Strong_Buy'], low_absorb_bound_det = generate_quant_signals(
                 df_detail, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
@@ -400,7 +408,7 @@ if selected_stock:
     except Exception as e: st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
-# ⏳ 策略回測績效驗證
+# ⏳ 策略回測績效驗證 (100% 修正 NameError 與空值污染)
 # ==============================================================================
 st.markdown("---")
 st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
@@ -417,6 +425,15 @@ backtest_results = []
 portfolio_total_buy_signals = 0 
 
 with st.spinner("正在模擬時間軸歷史建倉..."):
+    # 🛠️ 修正 (4)：精準計算大盤 SPY 在回測區間內的表現，徹底消除 NameError
+    df_spy_raw = spy_df_global.loc[bt_date_str:]
+    if not df_spy_raw.empty:
+        spy_start_price = df_spy_raw['Close'].iloc[0]
+        spy_latest_price = df_spy_raw['Close'].iloc[-1]
+        spy_performance_pct = ((spy_latest_price - spy_start_price) / spy_start_price) * 100
+    else:
+        spy_performance_pct = 0.0
+
     for ticker in active_tickers:
         try:
             ticker_sector = INITIAL_SECTOR_MAP.get(ticker, "未分類")
@@ -441,13 +458,14 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
             df_bt['SPY_Safe'] = df_bt['SPY_Close'] >= df_bt['SPY_MA200']
             df_bt['SPY_Safe'] = df_bt['SPY_Safe'].fillna(True)
 
+            # 提取指定起始日之後的資料範圍
             df_scan = df_bt.loc[bt_date_str:].copy()
             if df_scan.empty: continue
             
             latest_today_price = df_bt['Close'].iloc[-1]
             currency = "NT$ " if ".TW" in ticker else "$ "
             
-            # 回測端完全代入相同函數
+            # 回測端完全調用相同解耦核心函數
             df_scan['Sparse_Strong_Buy'], low_absorb_bound_bt = generate_quant_signals(
                 df_scan, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
@@ -460,7 +478,13 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
             
             if not buy_dates.empty:
                 first_date = buy_dates[0]
-                final_entry_price = min(low_absorb_bound_bt.loc[first_date], df_scan.loc[first_date, 'BB_Lower'], df_scan.loc[first_date, 'Low'])
+                
+                # 🛠️ 修正 (1)：新增保護機制，若計算出來的網格下限包含空值，改以當日最低價安全替代，防止空值污染
+                raw_grid_lower = low_absorb_bound_bt.loc[first_date]
+                if pd.isna(raw_grid_lower) or pd.isna(df_scan.loc[first_date, 'BB_Lower']):
+                    final_entry_price = float(df_scan.loc[first_date, 'Low'])
+                else:
+                    final_entry_price = min(raw_grid_lower, df_scan.loc[first_date, 'BB_Lower'], df_scan.loc[first_date, 'Low'])
                 
                 post_buy_df = df_scan.loc[first_date:]
                 max_dd_pct = ((post_buy_df['Low'].min() - final_entry_price) / final_entry_price) * 100
@@ -489,6 +513,7 @@ if backtest_results:
     avg_return = df_bt_results['累積報酬率'].str.replace('%', '').astype(float).mean()
     win_rate = (df_bt_results['累積報酬率'].str.replace('%', '').astype(float) > 0).mean() * 100
     
+    # 💥 精準呈現所有指標的終極輸出看板
     st.info(f"📈 策略平均報酬率：**{avg_return:.1f}%** | 🎯 策略勝率：**{win_rate:.1f}%** | 💰 期間內組合總買入次數：**{portfolio_total_buy_signals} 次** | 📊 同期對比 SPY：**{spy_performance_pct:.1f}%**")
 else:
     st.info(f"自 {bt_date_str} 起算，目前的滑桿參數未觸發任何回測歷史建倉單。")
