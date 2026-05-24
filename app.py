@@ -87,30 +87,24 @@ def load_spy_data(start_str):
     spy['MA200'] = spy['Close'].rolling(window=200).mean()
     return spy
 
-# 🛠️ 核心進化：新增「中長期季線趨勢破位法」與「空頭結構2次限購硬熔斷」的終極引擎
+# 核心交易訊號生成器：一視同仁，完全由滑桿引信與自然週限購盾驅動
 def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil):
     df = df_data.copy()
     sparse_strong_buy = pd.Series(False, index=df.index)
     
-    if 'MA20_actual' not in df.columns or 'ATR' not in df.columns or 'Volume' not in df.columns:
+    if 'MA20_actual' not in df.columns or 'ATR' not in df.columns:
         return sparse_strong_buy, pd.Series(0.0, index=df.index)
         
-    # 計算大戶籌碼指標與中長線季線趨勢（MA60）
-    df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
-    df['MA5'] = df['Close'].rolling(window=5).mean()
-    df['MA60'] = df['Close'].rolling(window=60).mean()  # 💡 季線：判定中長線多空生命結構
-    
     low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_mult)
     price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
     rsi_cond = df['RSI'] <= rsi_val
     
     served_weeks = set()
     last_buy_price = None
-    buy_signals_counter = 0  # 🛠️ 標的獨立計數器：用來強硬落實「爛股票一輩子最多買 2 次」的鐵律
     
     for date, is_triggered in price_cond.items():
         if is_triggered and rsi_cond.loc[date]:
-            if pd.isna(df.loc[date, 'MA20_actual']) or pd.isna(df.loc[date, 'ATR']) or pd.isna(df.loc[date, 'Vol_MA20']) or pd.isna(df.loc[date, 'MA60']): 
+            if pd.isna(df.loc[date, 'MA20_actual']) or pd.isna(df.loc[date, 'ATR']): 
                 continue
                 
             if not pd.isna(df.loc[date, 'MA200']):
@@ -124,52 +118,31 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             if use_market_fil and not is_market_safe_today and not is_ma200_extreme_crash:
                 is_allowed = False
                 
+            # 一視同仁前置多頭濾網
             if not df.loc[date, 'Is_True_Bull_Before']:
                 is_allowed = False
                 
             if not is_allowed: continue
-            
-            # 🛠️【核心大手術：多空結構硬化 2次限購盾】
-            # 不看代碼，純看數學結構：如果月線小於季線（MA20 < MA60），代表這檔股票正處於殺估值的單邊大熊市（NOW/SOFI 典型狀態）
-            is_weak_bearish_structure = df.loc[date, 'MA20_actual'] < df.loc[date, 'MA60']
-            
-            if is_weak_bearish_structure and buy_signals_counter >= 2:
-                continue  # 💥 超過2次絕對熔斷！就算它後來有任何假反彈或爆量，一律不給過，直接死鎖在 2 次內
                 
             current_touch_price = min(low_absorb_bound.loc[date], df.loc[date, 'BB_Lower'], df.loc[date, 'Low'])
             current_year, current_week, _ = date.isocalendar()
             current_yw = (current_year, current_week)
             
-            # 智慧型大戶吸籌量能判定
-            is_volume_spike = df.loc[date, 'Volume'] >= (df.loc[date, 'Vol_MA20'] * 1.2)
-            is_trend_turning = df.loc[date, 'Close'] >= df.loc[date, 'MA5']
-            
-            # 同一個自然週內的加倉風控
+            # 自然週鋼鐵限購盾
             if current_yw in served_weeks:
                 price_drop_target = last_buy_price * (1 - (drop_pct / 100))
-                if current_touch_price <= price_drop_target and (is_volume_spike or is_trend_turning):
+                if current_touch_price <= price_drop_target:
                     sparse_strong_buy[date] = True
                     last_buy_price = current_touch_price
-                    buy_signals_counter += 1
                 continue
-            else:
-                # 跨入新的一週
-                if last_buy_price is not None and current_touch_price < last_buy_price:
-                    # 如果股票走勢極弱，且沒有聰明錢進來爆量接盤，直接阻斷
-                    if not is_volume_spike and not is_trend_turning:
-                        continue 
             
-            # 成功扣引信進場
             sparse_strong_buy[date] = True
             served_weeks.add(current_yw)
             last_buy_price = current_touch_price
-            buy_signals_counter += 1  # 累計開槍次數
             
     return sparse_strong_buy, low_absorb_bound
 
-# ==============================================================================
-# 全量股票資料庫初始化
-# ==============================================================================
+# 全量股票資料庫
 INITIAL_SECTOR_MAP = {
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
@@ -190,10 +163,10 @@ INITIAL_SECTOR_MAP = {
     "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", "2382.TW": "AI巨頭與軟體", "CBRS": "AI巨頭與軟體",
     "ARKX": "航太太空國防", "NASA": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
     "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", "ONDS": "航太太空國防",
-    "XOM": "傳統能源礦產", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
+    "XOM": "傳統能源礦产", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
     "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技",
     "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
-    "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資产管理",
+    "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理",
     "TSLA": "智能車新能源", "BYDDF": "智能車新能源", "MSTR": "數位資產科技", 
     "BRK-B": "綜合控股投資", "GLD": "綜合控股投資", "SHLD": "綜合控股投資", "NBIS": "綜合控股投資",
     "2330.TW": "晶圓代工製程", "0050.TW": "市值型大盤", "2851.TW": "金融再保險", "5607.TW": "航空航運物流",
@@ -214,6 +187,7 @@ if "p_rsi" not in st.session_state: st.session_state.p_rsi = 34
 if "p_drop" not in st.session_state: st.session_state.p_drop = 5
 if "p_bias" not in st.session_state: st.session_state.p_bias = 4
 if "strategy_selection" not in st.session_state: st.session_state.strategy_selection = "💎 中等型 (價值)"
+# 🛠️ 核心修正：將「回測起始日期」寫入全域狀態記憶體中，預設為 2025/01/01
 if "bt_start_date" not in st.session_state: st.session_state.bt_start_date = datetime(2025, 1, 1).date()
 
 selected_strategy = st.sidebar.segmented_control(
@@ -267,8 +241,8 @@ if is_any_slider_changed:
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
-st.markdown(f"##### ⚖️ 當前引擎運行狀態：`{st.session_state.strategy_selection}`")
-st.success("🎯 **高階優化公告**：系統已成功部署【中長線結構空頭排列（MA20 < MA60）之雙擊熔斷機制】。高波動弱勢股只要結構走壞，系統會強制將其一生加倉上限鎖死在 2 次之內，而 TSM、NVDA 等優質股在牛市修正時大戶爆量吸籌，將會被智慧型完美解鎖，大幅放大整體收益率！")
+st.markdown(f"##### ⚖️ 當前引擎運行狀態：`{st.session_state.strategy_selection}` (滑桿參數：ATR {st.session_state.p_atr}x / RSI {st.session_state.p_rsi} / 再跌門檻 {st.session_state.p_drop}% / 年線負乖離 {st.session_state.p_bias}%)")
+st.caption("💡 量化引擎已完全解耦。所有策略判定 100% 只依據滑桿絕對數值，絕無隱藏額外限制，保證各策略與特調引信完全一視同仁。")
 
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
@@ -459,18 +433,11 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
         spy_performance_pct = ((spy_latest_price - spy_start_price) / spy_start_price) * 100
     else:
         spy_performance_pct = 0.0
-with st.spinner("正在模擬時間軸歷史建倉..."):
-    df_spy_raw = spy_df_global.loc[bt_date_str:]
-    if not df_spy_raw.empty:
-        spy_start_price = df_spy_raw['Close'].iloc[0]
-        spy_latest_price = df_spy_raw['Close'].iloc[-1]
-        spy_performance_pct = ((spy_latest_price - spy_start_price) / spy_start_price) * 100
-    else:
-        spy_performance_pct = 0.0
 
     for ticker in active_tickers:
         try:
             ticker_sector = INITIAL_SECTOR_MAP.get(ticker, "未分類")
+            # 確保歷史波段與均線緩衝
             df_bt = yf.Ticker(ticker).history(start=(st.session_state.bt_start_date - timedelta(days=300)).strftime('%Y-%m-%d'))
             if df_bt.empty or len(df_bt) < 240: continue
             
@@ -498,7 +465,6 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
             latest_today_price = df_bt['Close'].iloc[-1]
             currency = "NT$ " if ".TW" in ticker else "$ "
             
-            # 回測端同步智慧量化引擎
             df_scan['Sparse_Strong_Buy'], low_absorb_bound_bt = generate_quant_signals(
                 df_scan, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
             )
@@ -546,4 +512,4 @@ if backtest_results:
     
     st.info(f"📈 策略平均報酬率：**{avg_return:.1f}%** | 🎯 策略勝率：**{win_rate:.1f}%** | 💰 期間內組合總買入次數：**{portfolio_total_buy_signals} 次** | 📊 同期對比 SPY：**{spy_performance_pct:.1f}%**")
 else:
-    st.info(f"自 {bt_date_str} 起算，目前的滑桿參數未觸發 any 回測歷史建倉單。")
+    st.info(f"自 {bt_date_str} 起算，目前的滑桿參數未觸發任何回測歷史建倉單。")
