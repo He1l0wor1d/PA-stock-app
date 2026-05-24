@@ -82,12 +82,6 @@ INITIAL_SECTOR_MAP = {
 
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
 
-# ==============================================================================
-# 🎮 核心狀態控制區（三種一鍵情境預設按鈕控制）
-# ==============================================================================
-#st.sidebar.markdown("---")
-#st.sidebar.header("⚙️ 觀察名單管理")
-
 with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
     add_ticker = st.text_input("輸入代碼 (美股如: NVDA / 台股如: 2317.TW)").strip().upper()
     add_sector = st.selectbox("產業分類", sorted(list(set(st.session_state.sector_map.values()))))
@@ -98,7 +92,9 @@ with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
 
-
+# ==============================================================================
+# 🎮 三種風險偏好策略情境按鈕重構區（精準拉開出手頻率與核心勝率）
+# ==============================================================================
 st.sidebar.header("🎯 策略快速情境預設（一鍵切換）")
 
 if "p_atr" not in st.session_state: st.session_state.p_atr = 1.4
@@ -110,34 +106,34 @@ if "p_bias" not in st.session_state: st.session_state.p_bias = 8
 btn_col1, btn_col2, btn_col3 = st.sidebar.columns(3)
 
 with btn_col1:
-    if st.button("板塊💎"):
-        st.session_state.p_atr = 1.4
-        st.session_state.p_rsi = 35
-        st.session_state.p_window = 20
-        st.session_state.p_drop = 5
-        st.session_state.p_bias = 4
+    if st.button("🛡️ 保守型\n(大跌抄底)"):
+        st.session_state.p_atr = 2.2         # 網格極端放寬，杜絕中途進場
+        st.session_state.p_rsi = 24          # RSI 鎖死極端恐慌
+        st.session_state.p_window = 45       # 拉長排他時間防止連環亮燈
+        st.session_state.p_drop = 8          # 二次買入條件極其嚴苛
+        st.session_state.p_bias = 7          # 配合修正A精準抓取大崩盤極值底
         st.rerun()
 
 with btn_col2:
-    if st.button("抄底🈹"):
-        st.session_state.p_atr = 2.1
-        st.session_state.p_rsi = 25
-        st.session_state.p_window = 30
-        st.session_state.p_drop = 8
-        st.session_state.p_bias = 7
+    if st.button("💎 中等型\n(價值低估)"):
+        st.session_state.p_atr = 1.3         # 標準網格下限
+        st.session_state.p_rsi = 34          # 常態板塊價值修正區
+        st.session_state.p_window = 25       # 正常波段防守
+        st.session_state.p_drop = 5          # 穩定加倉
+        st.session_state.p_bias = 4          # 捕捉中度偏離
         st.rerun()
 
 with btn_col3:
-    if st.button("網格⚡"):
-        st.session_state.p_atr = 1.0
-        st.session_state.p_rsi = 42
-        st.session_state.p_window = 50
-        st.session_state.p_drop = 2
-        st.session_state.p_bias = 2
+    if st.button("⚡ 積極型\n(高頻網格)"):
+        st.session_state.p_atr = 0.7         # 網格極度敏感，輕微修正即觸發
+        st.session_state.p_rsi = 45          # RSI 高位寬鬆，買在半山腰
+        st.session_state.p_window = 10       # 10天即可重複扣引信
+        st.session_state.p_drop = 2          # 再跌2%就瘋狂亮燈
+        st.session_state.p_bias = 2          # 輕微年線負乖離即破鎖
         st.rerun()
+
 st.sidebar.header("📊 對稱網格參數微調")
 atr_period = 14
-#st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天")
 
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, value=st.session_state.p_atr, step=0.1)
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制", 15, 45, value=st.session_state.p_rsi, step=1)
@@ -419,15 +415,15 @@ if selected_stock:
         st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
-# ⏳ 策略回測績效驗證
+# ⏳ 策略回測績效驗證（已整合全量標的、多重潛在強買訊號計數器）
 # ==============================================================================
 st.markdown("---")
 st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
-st.markdown("從您指定的日期開始往後掃描，找出每一檔股票**「第一次」盤中觸發指定訊號的日子與成交價**，並對比今日收盤價，驗證策略真實報酬率！")
+st.markdown("從您指定的日期開始往後掃描，找出每一檔股票**「第一次」觸發訊號時的模擬建倉價**，並統計整個歷史區間內**累計跳出強買訊號的次數**！")
 
 backtest_col1, backtest_col2, _ = st.columns([1, 1, 2])
 with backtest_col1:
-    default_backtest_date = datetime(2026, 1, 1).date()
+    default_backtest_date = datetime(2025, 1, 1).date()
     backtest_date = st.date_input("📅 選擇掃描起始日期：", value=default_backtest_date)
 
 with backtest_col2:
@@ -474,8 +470,12 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
             df_scan = df_scan.copy()
             df_scan['SPY_Close'] = df_spy_raw['Close']
             
+            # 🛠️ 核心優化：建立該個股回測區間內完整的「強買訊號」歷史矩陣，用於高精準度次數統計
             last_bt_date = None
             last_bt_price = None
+            
+            total_strong_buy_count = 0  # 🎯 新增：強買信號次數計數器
+            first_trade_data = None     # 🎯 用於捕捉第一次觸發交易的錨點
             
             for date, row in df_scan.iterrows():
                 past_close = row['Close']
@@ -511,48 +511,59 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                     
                     if last_bt_date is None:
                         is_past_strong_buy = True
+                        total_strong_buy_count += 1
                         last_bt_date = date
                         last_bt_price = bt_touch_price
                     else:
                         days_passed = (date - last_bt_date).days
                         if is_ma200_extreme_crash_bt:
                             is_past_strong_buy = True
+                            total_strong_buy_count += 1
                             last_bt_date = date
                             last_bt_price = bt_touch_price
                         elif days_passed > wave_window_days:
                             is_past_strong_buy = True
+                            total_strong_buy_count += 1
                             last_bt_date = date
                             last_bt_price = bt_touch_price
                         else:
                             price_drop_target = last_bt_price * (1 - (min_drop_pct / 100))
                             if bt_touch_price <= price_drop_target:
                                 is_past_strong_buy = True
+                                total_strong_buy_count += 1
                                 last_bt_date = date
                                 last_bt_price = bt_touch_price
                 
                 is_past_normal_buy = abs(past_low - past_ma20) / past_ma20 <= 0.02
                 
-                signal = None
-                if signal_choice == "買入 + 強力買入":
-                    if is_past_strong_buy: signal = "🔥 強力買入"
-                    elif is_past_normal_buy: signal = "🟢 買入"
-                elif signal_choice == "單獨買入" and is_past_normal_buy and not is_past_strong_buy:
-                    signal = "🟢 買入"
-                elif signal_choice == "單獨強力買入" and is_past_strong_buy:
-                    signal = "🔥 強力買入"
+                # 判斷當天滿足何種信號類型
+                current_signal = None
+                if is_past_strong_buy: 
+                    current_signal = "🔥 強力買入"
+                elif is_past_normal_buy and not is_past_strong_buy: 
+                    current_signal = "🟢 買入"
                 
-                if signal is None: continue 
-                
-                final_entry_price = last_bt_price if signal == "🔥 強力買入" else past_ma20
-                return_pct = ((latest_today_price - final_entry_price) / final_entry_price) * 100
-                
-                backtest_results.append({
-                    "產業": ticker_sector, "代碼": ticker,
-                    "建倉日期": date.strftime('%Y-%m-%d'), "當時訊號": signal,
-                    "買入價": f"{currency}{final_entry_price:.1f}", "今日最新價": f"{currency}{latest_today_price:.1f}",
-                    "累積報酬率": f"{return_pct:.1f}%"
-                })
-                break 
+                # 匹配使用者選擇的過濾類型，固定鎖定「第一次觸發」做為建倉績效基準
+                if first_trade_data is None and current_signal is not None:
+                    is_match = False
+                    if signal_choice == "買入 + 強力買入": is_match = True
+                    elif signal_choice == "單獨買入" and current_signal == "🟢 買入": is_match = True
+                    elif signal_choice == "單獨強力買入" and current_signal == "🔥 強力買入": is_match = True
+                    
+                    if is_match:
+                        final_entry_price = bt_touch_price if current_signal == "🔥 強力買入" else past_ma20
+                        return_pct = ((latest_today_price - final_entry_price) / final_entry_price) * 100
+                        first_trade_data = {
+                            "產業": ticker_sector, "代碼": ticker,
+                            "首次建倉日": date.strftime('%Y-%m-%d'), "當時訊號": current_signal,
+                            "模擬買入價": f"{currency}{final_entry_price:.1f}", "今日最新價": f"{currency}{latest_today_price:.1f}",
+                            "累積報酬率": f"{return_pct:.1f}%"
+                        }
+            
+            # 歷史掃描結束後，如果該個股有觸發建倉，將累計強買訊號次數合併輸出到表格中
+            if first_trade_data is not None:
+                first_trade_data["強買訊號次數"] = f"{total_strong_buy_count} 次"
+                backtest_results.append(first_trade_data)
 
         except Exception as e: pass
 
@@ -560,6 +571,11 @@ if backtest_results:
     df_bt_results = pd.DataFrame(backtest_results)
     df_bt_results['sort_val'] = df_bt_results['累積報酬率'].str.replace('%', '').astype(float)
     df_bt_results = df_bt_results.sort_values(by='sort_val', ascending=False).drop('sort_val', axis=1)
+    
+    # 調整欄位順序，讓強買次數非常直觀地出現在看板上
+    cols_order = ["產業", "代碼", "首次建倉日", "當時訊號", "強買訊號次數", "模擬買入價", "今日最新價", "累積報酬率"]
+    df_bt_results = df_bt_results[[c for c in cols_order if c in df_bt_results.columns]]
+    
     st.dataframe(df_bt_results, use_container_width=True, hide_index=True)
     
     avg_return = df_bt_results['累積報酬率'].str.replace('%', '').astype(float).mean()
