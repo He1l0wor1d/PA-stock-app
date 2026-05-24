@@ -430,13 +430,14 @@ if selected_stock:
     except Exception as e: st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
-# ⏳ 策略回測績效驗證
+# ⏳ 策略回測績效驗證 (🛠️ 狀態記憶升級版)
 # ==============================================================================
 st.markdown("---")
 st.header("⏳ 策略回測績效驗證 (實時動態 Demo)")
 
 backtest_col1, backtest_col2, _ = st.columns([1, 1, 2])
 with backtest_col1:
+    # 🛠️ 核心修正：將日期元件綁定到 st.session_state 全域記憶體上，徹底防止按鈕點擊時時光倒流
     user_date_selection = st.date_input("📅 選擇掃描起始日期：", value=st.session_state.bt_start_date, key="bt_date_input")
     if user_date_selection != st.session_state.bt_start_date:
         st.session_state.bt_start_date = user_date_selection
@@ -445,10 +446,19 @@ with backtest_col1:
 with backtest_col2:
     signal_choice = st.selectbox("🎯 選擇回測訊號類型：", options=["單獨強力買入", "單獨買入", "買入 + 強力買入"], index=0)
 
+# 使用完全被鎖定的全域日期狀態進行回測時間軸切片
 bt_date_str = st.session_state.bt_start_date.strftime('%Y-%m-%d')
 backtest_results = []
 portfolio_total_buy_signals = 0 
 
+with st.spinner("正在模擬時間軸歷史建倉..."):
+    df_spy_raw = spy_df_global.loc[bt_date_str:]
+    if not df_spy_raw.empty:
+        spy_start_price = df_spy_raw['Close'].iloc[0]
+        spy_latest_price = df_spy_raw['Close'].iloc[-1]
+        spy_performance_pct = ((spy_latest_price - spy_start_price) / spy_start_price) * 100
+    else:
+        spy_performance_pct = 0.0
 with st.spinner("正在模擬時間軸歷史建倉..."):
     df_spy_raw = spy_df_global.loc[bt_date_str:]
     if not df_spy_raw.empty:
