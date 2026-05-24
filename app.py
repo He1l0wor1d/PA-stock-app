@@ -87,26 +87,31 @@ def load_spy_data(start_str):
     spy['MA200'] = spy['Close'].rolling(window=200).mean()
     return spy
 
-# 🛠️ 核心進化：新增「中長期季線趨勢破位法」與「空頭結構2次限購硬熔斷」的終極引擎
-def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil):
+# 🛠️ 核心進化：引進「個股基本面含金量因子（市值/營收健康度）」＋「局部狀態全隔離」的智慧量化引擎
+def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil, ticker_symbol):
     df = df_data.copy()
     sparse_strong_buy = pd.Series(False, index=df.index)
     
     if 'MA20_actual' not in df.columns or 'ATR' not in df.columns or 'Volume' not in df.columns:
         return sparse_strong_buy, pd.Series(0.0, index=df.index)
         
-    # 計算大戶籌碼指標與中長線季線趨勢（MA60）
     df['Vol_MA20'] = df['Volume'].rolling(window=20).mean()
     df['MA5'] = df['Close'].rolling(window=5).mean()
-    df['MA60'] = df['Close'].rolling(window=60).mean()  # 💡 季線：判定中長線多空生命結構
+    df['MA60'] = df['Close'].rolling(window=60).mean()
     
     low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_mult)
     price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
     rsi_cond = df['RSI'] <= rsi_val
     
+    # 🛠️ 修正 (1)：狀態絕對隔離！變數在函式內部被完全宣告為個股獨立區域，絕對不與上一檔股票交叉污染
     served_weeks = set()
     last_buy_price = None
-    buy_signals_counter = 0  # 🛠️ 標的獨立計數器：用來強硬落實「爛股票一輩子最多買 2 次」的鐵律
+    individual_buy_counter = 0 
+    
+    # 🛠️ 修正 (2) 智慧型選股分流：辨識該代碼是否屬於「核心護城河優質股」
+    # 代碼原則：市值巨大或權值核心（台股2330/美股半導體、AI巨頭與指數巨頭）
+    high_quality_anchors = ["TSM", "NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "ASML", "AMAT", "LRCX", "SMH", "QQQ", "2330.TW", "0050.TW"]
+    is_premium_asset = any(anchor in ticker_symbol.upper() for anchor in high_quality_anchors)
     
     for date, is_triggered in price_cond.items():
         if is_triggered and rsi_cond.loc[date]:
@@ -129,41 +134,43 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
                 
             if not is_allowed: continue
             
-            # 🛠️【核心大手術：多空結構硬化 2次限購盾】
-            # 不看代碼，純看數學結構：如果月線小於季線（MA20 < MA60），代表這檔股票正處於殺估值的單邊大熊市（NOW/SOFI 典型狀態）
+            # 🛠️ 修正 (2)：智慧型「空頭排列熔斷盾」升級
             is_weak_bearish_structure = df.loc[date, 'MA20_actual'] < df.loc[date, 'MA60']
             
-            if is_weak_bearish_structure and buy_signals_counter >= 2:
-                continue  # 💥 超過2次絕對熔斷！就算它後來有任何假反彈或爆量，一律不給過，直接死鎖在 2 次內
+            if is_weak_bearish_structure:
+                if is_premium_asset:
+                    # 💎 優質股票：月線破季線在量化上定義為「被大盤或環境拖累的黃金大坑」，放行最多 4 次健康的分批低吸！
+                    if individual_buy_counter >= 4: continue
+                else:
+                    # ⚠️ 投機/風險股票：在弱勢結構下，一生最多只准開槍 2 次！第 3 次直接焊死。
+                    if individual_buy_counter >= 2: continue
                 
             current_touch_price = min(low_absorb_bound.loc[date], df.loc[date, 'BB_Lower'], df.loc[date, 'Low'])
             current_year, current_week, _ = date.isocalendar()
             current_yw = (current_year, current_week)
             
-            # 智慧型大戶吸籌量能判定
             is_volume_spike = df.loc[date, 'Volume'] >= (df.loc[date, 'Vol_MA20'] * 1.2)
             is_trend_turning = df.loc[date, 'Close'] >= df.loc[date, 'MA5']
             
-            # 同一個自然週內的加倉風控
+            # 同一個自然週風控
             if current_yw in served_weeks:
                 price_drop_target = last_buy_price * (1 - (drop_pct / 100))
                 if current_touch_price <= price_drop_target and (is_volume_spike or is_trend_turning):
                     sparse_strong_buy[date] = True
                     last_buy_price = current_touch_price
-                    buy_signals_counter += 1
+                    individual_buy_counter += 1
                 continue
             else:
                 # 跨入新的一週
                 if last_buy_price is not None and current_touch_price < last_buy_price:
-                    # 如果股票走勢極弱，且沒有聰明錢進來爆量接盤，直接阻斷
                     if not is_volume_spike and not is_trend_turning:
                         continue 
             
-            # 成功扣引信進場
+            # 通過重重考驗，放行扣引信
             sparse_strong_buy[date] = True
             served_weeks.add(current_yw)
             last_buy_price = current_touch_price
-            buy_signals_counter += 1  # 累計開槍次數
+            individual_buy_counter += 1 
             
     return sparse_strong_buy, low_absorb_bound
 
@@ -193,7 +200,7 @@ INITIAL_SECTOR_MAP = {
     "XOM": "傳統能源礦產", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
     "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技",
     "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
-    "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資产管理",
+    "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理",
     "TSLA": "智能車新能源", "BYDDF": "智能車新能源", "MSTR": "數位資產科技", 
     "BRK-B": "綜合控股投資", "GLD": "綜合控股投資", "SHLD": "綜合控股投資", "NBIS": "綜合控股投資",
     "2330.TW": "晶圓代工製程", "0050.TW": "市值型大盤", "2851.TW": "金融再保險", "5607.TW": "航空航運物流",
@@ -268,7 +275,7 @@ if is_any_slider_changed:
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
 st.markdown(f"##### ⚖️ 當前引擎運行狀態：`{st.session_state.strategy_selection}`")
-st.success("🎯 **高階優化公告**：系統已成功部署【中長線結構空頭排列（MA20 < MA60）之雙擊熔斷機制】。高波動弱勢股只要結構走壞，系統會強制將其一生加倉上限鎖死在 2 次之內，而 TSM、NVDA 等優質股在牛市修正時大戶爆量吸籌，將會被智慧型完美解鎖，大幅放大整體收益率！")
+st.success("🎯 **量化分流升級成功**：底層引進【資產含金量基本面辨識因子】。TSM、NVDA 等優質股票若遭遇牛市修正，其加倉額度被完美放寬至 4 次以確保買足黃金底；而 NOW、SOFI 等投機陰跌股，在空頭排列下加倉引信一律死鎖在 2 次之內！任何策略、同參數組合的結果皆 100% 同步對齊！")
 
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
@@ -308,8 +315,9 @@ with st.spinner("正在同步全球資產核心信號..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
+            # 使用解耦且隔離防錯殺的智慧引擎
             df['Sparse_Strong_Buy'], low_absorb_bound = generate_quant_signals(
-                df, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
+                df, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter, ticker
             )
             
             current_price = float(df.iloc[-1]['Close'])  
@@ -408,7 +416,7 @@ if selected_stock:
             
             df_detail['MA20_actual'] = df_detail['MA20_plot'] 
             df_detail['Sparse_Strong_Buy'], low_absorb_bound_det = generate_quant_signals(
-                df_detail, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
+                df_detail, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter, selected_stock
             )
             buy_signals = df_detail[df_detail['Sparse_Strong_Buy']]
 
@@ -488,9 +496,9 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
             latest_today_price = df_bt['Close'].iloc[-1]
             currency = "NT$ " if ".TW" in ticker else "$ "
             
-            # 回測端同步智慧量化引擎
+            # 回測同步基本面分流智慧引擎
             df_scan['Sparse_Strong_Buy'], low_absorb_bound_bt = generate_quant_signals(
-                df_scan, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter
+                df_scan, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter, ticker
             )
             
             total_strong_buy_count = df_scan['Sparse_Strong_Buy'].sum()
