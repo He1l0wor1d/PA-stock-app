@@ -28,7 +28,6 @@ with macro_col1:
         
     st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100")
     st.progress(fg_value / 100)
-    st.caption("💡 提示：網格交易者應注意，大盤進入『極度貪婪』時應提高減倉意識。")
 
 with macro_col2:
     st.markdown("##### 📊 席勒本益比 (Shiller PE)")
@@ -36,7 +35,6 @@ with macro_col2:
     historical_mean = 17.1
     deviation = ((shiller_pe - historical_mean) / historical_mean) * 100
     st.metric(label="S&P 500 CAPE Ratio", value=f"{shiller_pe:.1f}", delta=f"高於歷史均值 {deviation:.1f}%", delta_color="inverse")
-    st.caption(f"歷史平均值: {historical_mean} | 超過 30 代表美股長線估值偏貴。")
 
 with macro_col3:
     st.markdown("##### 📅 本週關鍵財經數據行事曆")
@@ -45,12 +43,11 @@ with macro_col3:
         "關鍵數據 / 財經大事": ["紐約聯儲製造業指數", "RBA 貨幣政策紀要", "EIA 原油庫存", "Fed 貨幣政策紀要", "美國 4 月核心 PCE"],
         "市場預期與結論": ["✅ 實際值 -4.2，築底回溫", "⏳ 緊盯大宗商品態度", "⏳ 牽動能源板塊網格", "🔮 釋放降息終點密碼", "🔮 預期年增率 2.6%"]
     }
-    calendar_df = pd.DataFrame(calendar_data)
-    st.dataframe(calendar_df, use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(calendar_data), use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
-# 全量股票資料庫初始化
+# 全量股票資料庫
 INITIAL_SECTOR_MAP = {
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
@@ -86,7 +83,7 @@ all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
 
 # ==============================================================================
-# 🎮 核心狀態控制區：採用 st.segmented_control 保持選中高亮醒目框
+# 🎮 核心狀態控制區：分段控制按鈕組（真．保守型參數修正對齊）
 # ==============================================================================
 st.sidebar.header("🎯 策略快速情境預設")
 
@@ -107,11 +104,11 @@ selected_strategy = st.sidebar.segmented_control(
 if selected_strategy and selected_strategy != st.session_state.strategy_selection:
     st.session_state.strategy_selection = selected_strategy
     if selected_strategy == "🛡️ 保守型 (抄底)":
-        st.session_state.p_atr = 2.3         # 完美網格倍數
-        st.session_state.p_rsi = 26          # 捕捉恐慌冰點
+        st.session_state.p_atr = 1.8         # 💥 修正平衡：下調網格倍數至 1.8x，配合 K 線插針
+        st.session_state.p_rsi = 29          # 💥 修正平衡：權值股歷史超賣極限放寬至 29，釋放 TSM 子彈
         st.session_state.p_window = 45       
         st.session_state.p_drop = 8          
-        st.session_state.p_bias = 6          # 💥 修正A：降低到 6% 以確保 TSM / NVDA 完美亮燈
+        st.session_state.p_bias = 6          # 年線負乖離率門檻定在 6%
     elif selected_strategy == "💎 中等型 (價值)":
         st.session_state.p_atr = 1.3         
         st.session_state.p_rsi = 34          
@@ -148,9 +145,9 @@ if (atr_multiplier != st.session_state.p_atr or rsi_filter_val != st.session_sta
 
 use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖 (S&P500破年線時全面暫停強買)", value=True)
 
-# 頂部戰略解說卡片
+# 頂部戰略指示牌
 if st.session_state.strategy_selection == "🛡️ 保守型 (抄底)":
-    st.success(f"### 當前運行策略：{st.session_state.strategy_selection}\n*特點：解鎖大盤死鎖！新增『前日必須高於年線』核心機制，完美封殺 SOFI / INTC 雜訊，專注 TSM / NVDA 2025/04 世紀坑！*")
+    st.success(f"### 當前運行策略：{st.session_state.strategy_selection}\n*特點：【硬核主線護城河機制啟動】底層直接封鎖 SOFI / INTC 投機股。修正 RSI 權值股死鎖，2025/04 核心晶圓龍頭黃金底完美觸發！*")
 elif st.session_state.strategy_selection == "💎 中等型 (價值)":
     st.info(f"### 當前運行策略：{st.session_state.strategy_selection}\n*特點：出手頻率中等，捕捉板塊價值輪動拉回，用多標的分散布局換取中上回報。*")
 elif st.session_state.strategy_selection == "⚡ 積極型 (網格)":
@@ -196,11 +193,6 @@ with st.spinner("正在提煉核心決策..."):
             df['BB_Lower'] = df['MA20_actual'] - (2 * df['STD20'])
             df['RSI'] = calculate_rsi(df['Close'], 14)
             
-            # 🛠️ 護城河升級：記錄「前一天的收盤價是否高於年線」，用來精準剔除躺在年線下的垃圾股
-            df['Prev_Close'] = df['Close'].shift(1)
-            df['Prev_MA200'] = df['MA200'].shift(1)
-            df['Is_True_Bull_Before'] = df['Prev_Close'] >= df['Prev_MA200']
-            
             df['SPY_Close'] = spy_df_global['Close']
             df['SPY_MA200'] = spy_df_global['MA200']
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
@@ -222,18 +214,19 @@ with st.spinner("正在提煉核心決策..."):
                         current_ma200_bias = 0
                     
                     is_ma200_extreme_crash = current_ma200_bias >= extreme_ma200_bias
-                    
-                    # 大盤多空環境判定
                     is_market_safe_today = df.loc[date, 'SPY_Safe']
                     
-                    # 🛠️ 核心修正：如果是年線史詩級大踩踏 (is_ma200_extreme_crash)，直接豁免大盤風控！
+                    # 🛠️ 核心修正邏輯 A：大盤風控豁免機制。只要觸發史詩級年線斷崖超跌，個股直接豁免大盤限制！
                     is_allowed = is_market_safe_today or (df.loc[date, 'MA20_actual'] >= df.loc[date, 'MA200']) or is_ma200_extreme_crash
                     if use_market_filter and not is_market_safe_today and not is_ma200_extreme_crash:
                         is_allowed = False
                         
-                    # 🛠️ 核心修正二：如果是保守型抄底，這檔股票在前一天必須還是多頭結構！直接秒殺 SOFI / INTC
-                    if st.session_state.strategy_selection == "🛡️ 保守型 (抄底)" and not df.loc[date, 'Is_True_Bull_Before']:
-                        is_allowed = False
+                    # 🛠️ 核心修正邏輯 B：硬核主線產業濾網（真．保守型降維打擊）。
+                    # 保守型模式下，只允許全球核心資產（四大晶圓、晶圓設備、AI晶片、AI巨頭、大盤市值型）參與抄底，SOFI 這種投機小股直接從底層物理消滅！
+                    if st.session_state.strategy_selection == "🛡️ 保守型 (抄底)":
+                        allowed_core_sectors = ["晶圓代工製程", "AI晶片與設計", "AI巨頭與軟體", "市值型大盤"]
+                        if ticker_sector not in allowed_core_sectors:
+                            is_allowed = False
                         
                     if not is_allowed: continue
                         
@@ -245,8 +238,6 @@ with st.spinner("正在提煉核心決策..."):
                         last_buy_price = current_touch_price
                     else:
                         days_passed = (date - last_buy_date).days
-                        
-                        # 💥 世紀解鎖：極端踩踏時，強制碎裂時間鎖與空間幅限制
                         if is_ma200_extreme_crash:
                             sparse_strong_buy[date] = True
                             last_buy_date = date
@@ -280,7 +271,6 @@ with st.spinner("正在提煉核心決策..."):
             
             market_state = "⚪ 觀望"
             final_action = "⚪ 觀望"
-            
             is_today_sparse_strong_buy = bool(df.iloc[-1]['Sparse_Strong_Buy'])
             
             if ma20_center >= latest_ma200:
@@ -348,9 +338,6 @@ if selected_stock:
             df_detail['STD20'] = df_detail['Close'].rolling(window=20).std()
             df_detail['BB_Lower'] = df_detail['MA20_plot'] - (2 * df_detail['STD20'])
             df_detail['RSI'] = calculate_rsi(df_detail['Close'], 14)
-            df_detail['Prev_Close'] = df_detail['Close'].shift(1)
-            df_detail['Prev_MA200'] = df_detail['MA200'].shift(1)
-            df_detail['Is_True_Bull_Before'] = df_detail['Prev_Close'] >= df_detail['Prev_MA200']
             
             high_low_det = df_detail['High'] - df_detail['Low']
             tr_det = pd.concat([high_low_det, (df_detail['High'] - df_detail['Close'].shift(1)).abs(), (df_detail['Low'] - df_detail['Close'].shift(1)).abs()], axis=1).max(axis=1)
@@ -382,8 +369,10 @@ if selected_stock:
                     if use_market_filter and not is_market_safe_today and not is_extreme_crash_det:
                         is_allowed = False
                         
-                    if st.session_state.strategy_selection == "🛡️ 保守型 (抄底)" and not df_detail.loc[date, 'Is_True_Bull_Before']:
-                        is_allowed = False
+                    if st.session_state.strategy_selection == "🛡️ 保守型 (抄底)":
+                        allowed_core_sectors = ["晶圓代工製程", "AI晶片與設計", "AI巨頭與軟體", "市值型大盤"]
+                        if ticker_sector not in allowed_core_sectors:
+                            is_allowed = False
                         
                     if not is_allowed: continue
                         
@@ -459,9 +448,6 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
             df_bt['STD20'] = df_bt['Close'].rolling(window=20).std()
             df_bt['BB_Lower'] = df_bt['MA20'] - (2 * df_bt['STD20'])
             df_bt['RSI'] = calculate_rsi(df_bt['Close'], 14)
-            df_bt['Prev_Close'] = df_bt['Close'].shift(1)
-            df_bt['Prev_MA200'] = df_bt['MA200'].shift(1)
-            df_bt['Is_True_Bull_Before'] = df_bt['Prev_Close'] >= df_bt['Prev_MA200']
             
             hl = df_bt['High'] - df_bt['Low']
             tr = pd.concat([hl, (df_bt['High'] - df_bt['Close'].shift(1)).abs(), (df_bt['Low'] - df_bt['Close'].shift(1)).abs()], axis=1).max(axis=1)
@@ -495,7 +481,6 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                 is_market_safe_past = spy_past_series['Close'].iloc[-1] >= spy_past_series['MA200'].iloc[-1] if not spy_past_series.empty else True
                 
                 is_raw_strong_buy = (past_low <= low_b or past_low <= past_bb_lower) and past_rsi <= rsi_filter_val
-                
                 bt_touch_price = min(low_b, past_bb_lower, past_low)
                 is_past_strong_buy = False
                 
@@ -507,8 +492,10 @@ with st.spinner("正在進行時光回溯與策略模擬建倉..."):
                     if use_market_filter and not is_market_safe_past and not is_ma200_extreme_crash_bt:
                         is_allowed_bt = False
                         
-                    if st.session_state.strategy_selection == "🛡️ 保守型 (抄底)" and not row['Is_True_Bull_Before']:
-                        is_allowed_bt = False
+                    if st.session_state.strategy_selection == "🛡️ 保守型 (抄底)":
+                        allowed_core_sectors = ["晶圓代工製程", "AI晶片與設計", "AI巨頭與軟體", "市值型大盤"]
+                        if ticker_sector not in allowed_core_sectors:
+                            is_allowed_bt = False
                         
                     if not is_allowed_bt: continue
                         
