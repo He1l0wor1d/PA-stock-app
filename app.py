@@ -50,39 +50,58 @@ with macro_col3:
 
 st.markdown("---")
 
+# ==============================================================================
+# ✨ 第三層：AGI 2027 敘事與 SALP (13F) 聰明錢觀測站
+# ==============================================================================
+st.markdown("### 🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站")
+salp_col1, salp_col2 = st.columns([1, 1.8])
+
+with salp_col1:
+    st.markdown("##### 🔋 AGI 算力進度與物理瓶頸預警")
+    st.metric(label="兆元美元集群投資進度", value="約 35%", delta="Capex 持續上修", delta_color="normal")
+    st.progress(0.35)
+    st.info("💡 **SALP 觀點**：AI 發展最大限制是「天然氣產量」與「變壓器交付」。AI 必須插電，電力層是未來硬資產。")
+
+with salp_col2:
+    st.markdown("##### 🏦 SALP 基金敘事層級持倉")
+    salp_data = {
+        "敘事層級": ["⚡ 電力層 (Power)", "☁️ AI 雲端 (AI Cloud)", "🌐 光通訊 (Photonics)", "🖥️ 運算層 (Compute)"],
+        "代表標的": ["BE, CEG, VST", "CRWV, CORZ, IREN", "GLW, COHR", "NVDA, SMH, TSM"],
+        "籌碼動向": ["📈 長期做多", "📈 持續加倉", "🔍 戰略佈局", "🛡️ 買入賣權避險"],
+        "內化視角": ["防禦力與剛需最強", "現金流紅利即刻落地", "解決數據傳輸延遲", "防範估值擁擠泡沫"]
+    }
+    st.dataframe(pd.DataFrame(salp_data), use_container_width=True, hide_index=True)
+
+st.markdown("---")
+
+# 全量股票資料庫初始化
 INITIAL_SECTOR_MAP = {
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
     "AXTI": "晶圓代工製程", "SIMO": "晶圓代工製程", "ALAB": "晶圓代工製程", "SMH": "晶圓代工製程",
-    "PLAB": "晶圓代工製程", 
     "CSCO": "光通訊與網通", "ANET": "光通訊與網通", "GLW": "光通訊與網通", "COHR": "光通訊與網通", 
     "LITE": "光通訊與網通", "AAOI": "光通訊與網通", "FN": "光通訊與網通", "CIEN": "光通訊與網通", 
     "NOK": "光通訊與網通",  
-    "MU": "記憶體與儲存", "DRAM": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體儲存",
-    "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建", "AEP": "電網設備基建",
+    "DRAM": "記憶體與儲存", "MU": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體與儲存",
+    "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建",
     "VRT": "機房液冷散熱", "MOD": "機房液冷散熱", "3017.TW": "機房液冷散熱",
-    "CEG": "核能與天然氣", "VST": "核能與天然氣", "SMR": "核能與天然氣", "OKLO": "核能與天然氣",
-    "ENPH": "綠能與微電網", "SEDG": "綠能與微電網",
+    "CEG": "核能與天然氣", "VST": "核能與天然氣", "ENPH": "綠能與微電網", "SEDG": "綠能與微電網",
     "SOXX": "AI晶片與設計", "XSD": "AI晶片與設計", "NVDA": "AI晶片與設計", "AVGO": "AI晶片與設計", 
     "AMD": "AI晶片與設計", "QCOM": "AI晶片與設計", "MRVL": "AI晶片與設計", "TXN": "AI晶片與設計", 
     "ADI": "AI晶片與設計", "ON": "AI晶片與設計", "MPWR": "AI晶片與設計", "NVTS": "AI晶片與設計", "2454.TW": "AI晶片與設計",
-    "QQQ": "市值型大盤", "MAGS": "市值型大盤", 
-    "MSFT": "AI巨頭與軟體", "AAPL": "AI巨頭與軟體", "GOOGL": "AI巨頭與軟體", "AMZN": "AI巨頭與軟體", 
-    "META": "AI巨頭與軟體", "PLTR": "AI巨頭與軟體", "NOW": "AI巨頭與軟體", "ORCL": "AI巨頭與軟體", 
-    "APP": "AI巨頭與軟體", "NET": "AI巨頭與軟體", "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", 
-    "2382.TW": "AI巨頭與軟體", "CBRS": "AI巨頭與軟體", "NBIS": "AI巨頭與軟體", "HIMS": "AI巨頭與軟體",
-    "DOCN": "AI巨頭與軟體", "INOD": "AI巨頭與軟體",
+    "QQQ": "市值型大盤", "MAGS": "市值型大盤", "MSFT": "AI巨頭與軟體", "AAPL": "AI巨頭與軟體", 
+    "GOOGL": "AI巨頭與軟體", "AMZN": "AI巨頭與軟體", "META": "AI巨頭與軟體", "PLTR": "AI巨頭與軟體", 
+    "NOW": "AI巨頭與軟體", "ORCL": "AI巨頭與軟體", "APP": "AI巨頭與軟體", "NET": "AI巨頭與軟體", 
+    "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", "2382.TW": "AI巨頭與軟體", "CBRS": "AI巨頭與軟體",
     "ARKX": "航太太空國防", "NASA": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
-    "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", 
-    "ONDS": "航太太空國防", "FLY": "航太太空國防",
+    "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", "ONDS": "航太太空國防",
     "XOM": "傳統能源礦產", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
-    "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技", "HROW": "生技醫療科技",
+    "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技",
     "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
-    "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理", "RKT": "金融資產管理",
-    "COIN": "數位資產科技", "MSTR": "數位資產科技", 
-    "BRK-B": "綜合控股投資", "GLD": "綜合控股投資", "SHLD": "綜合控股投資",
+    "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理",
+    "TSLA": "智能車新能源", "BYDDF": "智能車新能源", "MSTR": "數位資產科技", 
+    "BRK-B": "綜合控股投資", "GLD": "綜合控股投資", "SHLD": "綜合控股投資", "NBIS": "綜合控股投資",
     "2330.TW": "晶圓代工製程", "0050.TW": "市值型大盤", "2851.TW": "金融再保險", "5607.TW": "航空航運物流",
-    "TTMI": "電子製造代工", "CLS": "電子製造代工", "SANM": "電子製造代工", "BYDDF": "智能車新能源"
 }
 
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
@@ -92,7 +111,6 @@ if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_S
 # ==============================================================================
 st.sidebar.header("🎯 策略快速情境預設（一鍵切換）")
 
-# 初始化 Session State 預設值，防止重整時參數消失
 if "p_atr" not in st.session_state: st.session_state.p_atr = 1.4
 if "p_rsi" not in st.session_state: st.session_state.p_rsi = 32
 if "p_window" not in st.session_state: st.session_state.p_window = 30
@@ -130,21 +148,21 @@ with btn_col3:
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 觀察名單管理")
 
-# 🛠️ 預設自動幫使用者勾選指定的 8 隻股票：TSM/NVDA/MU/SNDK/LITE/AAOI/AMD/INTC
-default_backtest_8 = ["TSM", "NVDA", "MU", "SNDK", "LITE", "AAOI", "AMD", "INTC"]
-# 確保這 8 隻都有在基礎地圖中
-for tk in default_backtest_8:
-    if tk not in st.session_state.sector_map:
-        st.session_state.sector_map[tk] = "記憶體與儲存" if tk == "SNDK" else "晶圓代工製程"
+with st.sidebar.expander("➕ 新增觀察股票", expanded=False):
+    add_ticker = st.text_input("輸入代碼 (美股如: NVDA / 台股如: 2317.TW)").strip().upper()
+    add_sector = st.selectbox("產業分類", sorted(list(set(st.session_state.sector_map.values()))))
+    if st.button("確認新增") and add_ticker:
+        st.session_state.sector_map[add_ticker] = add_sector
+        st.rerun()
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=default_backtest_8)
+# 🛠️ 核心修正：將預設值直接設為 all_current_tickers，保證全量股票一起加入運算與圖表
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理 (點 X 刪除)", options=all_current_tickers, default=all_current_tickers)
 
-st.sidebar.header("📊 對稱網格參數微調 (原始手動功能保留)")
+st.sidebar.header("📊 對稱網格參數微調")
 atr_period = 14
 st.sidebar.caption("⏱️ ATR 計算天數已固定鎖定為 14 天")
 
-# 透過 value=st.session_state.xxx 綁定按鈕狀態，同時保留拉桿讓使用者依然能手動調整
 atr_multiplier = st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, value=st.session_state.p_atr, step=0.1)
 rsi_filter_val = st.sidebar.slider("RSI 超賣過濾限制", 15, 45, value=st.session_state.p_rsi, step=1)
 wave_window_days = st.sidebar.slider("🛡️ 空間排他時間視窗 (天)", 10, 90, value=st.session_state.p_window, step=5)
@@ -200,6 +218,7 @@ with st.spinner("正在提煉核心決策..."):
             df['SPY_Safe'] = df['SPY_Close'] >= df['SPY_MA200']
             df['SPY_Safe'] = df['SPY_Safe'].fillna(True)
             
+            # 盤中最低價插針與技術超賣判定
             low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_multiplier)
             price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
             rsi_cond = df['RSI'] <= rsi_filter_val
@@ -207,6 +226,7 @@ with st.spinner("正在提煉核心決策..."):
             if use_market_filter:
                 raw_panic_signal = raw_panic_signal & df['SPY_Safe']
             
+            # 動態年線負乖離強制破鎖序列演算法
             sparse_strong_buy = pd.Series(False, index=df.index)
             last_buy_date = None
             last_buy_price = None
@@ -276,7 +296,7 @@ with st.spinner("正在提煉核心決策..."):
                 market_state = "📉 空頭結構 (會跌)"
                 if is_today_sparse_strong_buy:
                     final_action = "🔥 強力買入"
-                elif yesterday_close >= ma20_center and current_price < ma20_center: 
+                elif yesterday_close >= ma20_center Glen current_price < ma20_center: 
                     final_action = "🚨 強力賣出"
                 elif current_price >= high_toss_price: 
                     final_action = "🔴 賣出"
@@ -319,7 +339,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 個股動態決策軌道與核心基本面 (地毯式前瞻搜索定量引擎)
+# 🔍 個股動態決策軌道與核心基本面
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與核心基本面")
 
