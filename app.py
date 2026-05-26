@@ -353,11 +353,13 @@ with st.spinner("正在同步全球資產核心信號..."):
                     "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}"
                 })
 
+            # 調整後的看板輸出邏輯片段
             summary_data.append({
-                "產業領域": ticker_sector, "代碼": ticker, "當前股價": f"{currency_symbol}{current_price:.1f}",
-                "移動停利價位": trailing_stop_str, "昨收盤價": f"{currency_symbol}{yesterday_close:.1f}",
-                "MA20": f"{currency_symbol}{ma20_center:.1f}", "市場狀態": market_state, "綜合建議": final_action,
-                "買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}", "賣點": f"{currency_symbol}{high_toss_price:.1f}"
+                "代碼": ticker,
+                "綜合建議": final_action,
+                "現價": f"{currency_symbol}{current_price:.1f}",
+                "系統建議掛單買點": f"{currency_symbol}{min(low_absorb_price, current_bb_lower):.1f}", 
+                "市場狀態": market_state
             })
         except Exception: pass
 
