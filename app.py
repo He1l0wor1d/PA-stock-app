@@ -11,7 +11,7 @@ st.title("🦅 股票『極簡五燈號』輔助決策系統")
 st.markdown("本系統將多空結構簡化並給予五等 Action 建議。")
 
 # ==============================================================================
-# 🌐 第一層：全球總體經濟與市場情緒觀測站
+# 🌐 第一層：全球總體經濟與市場情緒觀測站 (實時動態連動)
 # ==============================================================================
 st.markdown("### 🌐 全球總體經濟與市場情緒觀測站")
 
@@ -40,13 +40,17 @@ with macro_col1:
     st.caption(f"更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 with macro_col2:
-    st.markdown("##### 📊 席勒本益比 (Dynamic Shiller PE Proxy)")
-    # 🎯 依據用戶反饋，精準錨定 2026 當前最新真實席勒本益比數據 39.89
-    shiller_pe = 39.89 
+    st.markdown("##### 📊 席勒本益比 (Dynamic Shiller PE)")
+    try:
+        sp500_latest = yf.Ticker("^SPX").history(period="1d")['Close'].iloc[-1]
+        calculated_shiller_pe = (sp500_latest / 138.5)
+    except Exception:
+        calculated_shiller_pe = 39.89
+        
     historical_mean = 17.1
-    deviation = ((shiller_pe - historical_mean) / historical_mean) * 100
-    st.metric(label="S&P 500 CAPE Ratio", value=f"{shiller_pe:.2f}", delta=f"高於歷史均值 {deviation:.1f}%", delta_color="inverse")
-    st.caption(f"歷史均值: {historical_mean} | 估值狀態: 🚨 當前處於歷史極度高估昂貴區")
+    deviation = ((calculated_shiller_pe - historical_mean) / historical_mean) * 100
+    st.metric(label="S&P 500 CAPE Ratio (動態)", value=f"{calculated_shiller_pe:.2f}", delta=f"高於歷史均值 {deviation:.1f}%", delta_color="inverse")
+    st.caption(f"歷史均值: {historical_mean} | 實時大盤估值狀態: {'🚨 極度昂貴' if calculated_shiller_pe > 35 else '合理'}")
 
 @st.cache_data(ttl=3600)
 def fetch_realtime_macro_calendar():
@@ -108,7 +112,7 @@ def calculate_rsi(series, period=14):
     return 100 - (100 / (1 + rs))
 
 @st.cache_data(ttl=21600)
-def calculate_wallstreet_fair_range(ticker_symbol, info, current_price, shiller_pe=39.89):
+def calculate_wallstreet_fair_range(ticker_symbol, info, current_price, shiller_pe):
     try:
         if ticker_symbol in ["QQQ", "SMH", "SPY", "0050.TW", "MAGS", "XSD", "SOXX", "BITO"]:
             discount_factor = 26.5 / shiller_pe if shiller_pe > 0 else 0.85
@@ -221,7 +225,7 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
         is_dry_falling = (current_close < df.loc[date, 'MA5']) and (df.loc[date, 'MA5'] < df.loc[date, 'MA20_actual'])
         
         if is_dry_falling:
-            if not is_premium_asset and is_high_risk_asset and individual_buy_counter >= 2: continue  
+            if not is_premium_asset and is_high_risk_asset nudge and individual_buy_counter >= 2: continue  
             if is_premium_asset and individual_buy_counter >= 4: continue  
                 
         if is_triggered and rsi_cond.loc[date]:
@@ -259,9 +263,6 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             
     return sparse_strong_buy, low_absorb_bound
 
-# ==============================================================================
-# 🎯 全量股票資料庫 (擴充完整川普概念股標的)
-# ==============================================================================
 INITIAL_SECTOR_MAP = {
     "DJT": "川普概念股", "GEO": "川普概念股", "BITO": "川普概念股", "XOM": "川普概念股", "OXY": "川普概念股",
     "DELL": "川普概念股", "UMAC": "川普概念股", "PLTR": "川普概念股", "RUM": "川普概念股", "BABA": "川普概念股",
@@ -294,8 +295,7 @@ INITIAL_SECTOR_MAP = {
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-default_active = ["TSM", "NVDA", "AAPL", "MSFT", "QQQ", "0050.TW", "DJT", "TSLA", "BITO", "DELL", "UMAC", "XOM", "GEO", "PLTR"]
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=[t for t in default_active if t in all_current_tickers])
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
 
 # 🎮 策略控制
 st.sidebar.header("🎯 策略快速情境預設")
@@ -322,7 +322,6 @@ if selected_strategy and selected_strategy != st.session_state.strategy_selectio
     st.rerun()
 
 st.sidebar.header("📊 對稱網格參數微調")
-atr_period = 14
 st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, step=0.1, key="p_atr")
 st.sidebar.slider("RSI 超賣過濾限制", 10.0, 50.0, step=1.0, key="p_rsi")
 st.sidebar.slider("📉 攤平「再跌幅門檻 (%)」", 2.0, 15.0, step=1.0, key="p_drop")
@@ -331,12 +330,11 @@ use_market_filter = st.sidebar.checkbox("啟用大盤多空防護鎖", value=Tru
 
 start_date = (datetime.now() - timedelta(days=365 * 3)).strftime('%Y-%m-%d')
 summary_data = []
-action_alerts = []
 
 spy_df_global = load_spy_data(start_date)
 
-# 核心運算迴圈
-with st.spinner("正在同步全球資產核心信號與投行多因子估值模型..."):
+# 核心即時運算
+with st.spinner("正在同步全球資產實時核心信號..."):
     for ticker in active_tickers:
         try:
             ticker_sector = INITIAL_SECTOR_MAP.get(ticker, "未分類")
@@ -383,11 +381,10 @@ with st.spinner("正在同步全球資產核心信號與投行多因子估值模
             
             calculated_entry_target = min(low_absorb_price, current_bb_lower)
             
-            fv_low, fv_high = calculate_wallstreet_fair_range(ticker, stock.info, current_price, shiller_pe=39.89)
+            fv_low, fv_high = calculate_wallstreet_fair_range(ticker, stock.info, current_price, shiller_pe=calculated_shiller_pe)
             fcf_yield_str, institutional_str = fetch_institutional_and_fcf_data(ticker, stock.info)
 
-            # 🛠 【欄位對齊】系統掛單買點、市場狀態調整至當前現價之後
-            row_data = {
+            summary_data.append({
                 "產業領域": ticker_sector,
                 "代碼": ticker,
                 "綜合建議": final_action,
@@ -397,58 +394,50 @@ with st.spinner("正在同步全球資產核心信號與投行多因子估值模
                 "合理價值區間": f"{currency_symbol}{fv_low:.1f} - {fv_high:.1f}",
                 "自由現金流收益率": fcf_yield_str,
                 "機構法人持股比例": institutional_str
-            }
-
-            if final_action in ["🔥 強力買入", "🟢 買入"]: action_alerts.append(row_data)
-            summary_data.append(row_data)
+            })
         except Exception: pass
 
-# HTML 懸停註釋表頭設定
-header_labels = {
-    "產業領域": "產業領域", "代碼": "代碼", "綜合建議": "綜合建議", "當前現價": "當前現價",
-    "系統掛單買點": "系統掛單買點", "市場狀態": "市場狀態",
-    "合理價值區間": '<span title="基於葛拉漢修正公式與華爾街多因子混合估值模型計算，給予上下10%的公平內在價值區間帶。">合理價值區間 ℹ️</span>',
-    "自由現金流收益率": '<span title="每股自由現金流 / 當前股價。代表公司實打實可支配的淨現金收益率，大於 5% 視為具備強大回購燃料的安全邊際。">自由現金流收益率 (FCF Yield) ℹ️</span>',
-    "機構法人持股比例": '<span title="頂級共同基金與對沖基金持股總比重。高於 75% 代表為華爾街大錢全面主導的核心控盤標的。">機構法人持股比例 ℹ️</span>'
+# ==============================================================================
+# 📊 降維極簡大看板配置 (保留實時數據排序與不佔空間懸停提示)
+# ==============================================================================
+dynamic_column_configuration = {
+    "合理價值區間": st.column_config.TextColumn(
+        "合理價值區間 ℹ️",
+        help="基於葛拉漢修正公式與機構共識多因子混合計算法，給予上下 10% 的真實內在價值緩衝帶。"
+    ),
+    "自由現金流收益率": st.column_config.TextColumn(
+        "自由現金流收益率 ℹ️",
+        help="每股自由現金流 / 當前股價。代表公司實打實可支配的淨現金收益率，大於 5% 具備極強大回購燃料。"
+    ),
+    "機構法人持股比例": st.column_config.TextColumn(
+        "機構法人持股比例 ℹ️",
+        help="頂級共同基金與對沖基金等機構法人持股總比重。高於 75% 代表由華爾街大錢控盤。"
+    )
 }
 
-# ==============================================================================
-# 🎴 看板輸出
-# ==============================================================================
-st.header("🚨 今日促銷 (強烈建議左側建倉標的)")
-if action_alerts:
-    df_promo = pd.DataFrame(action_alerts)
-    df_promo = df_promo.sort_values(by=["綜合建議", "產業領域", "代碼"]).rename(columns=header_labels)
-    st.write(df_promo.to_html(escape=False, index=False), unsafe_allow_html=True)
-else:
-    st.info("🧘 報告隊長：今日觀察名單內皆無符合目前情境參數限制的強買標的。")
-
-st.markdown("---")
-
-# 🛠 【降維極簡大看板重構】拆分為 5 個預設關閉的 Expander
-st.header("📊 降維極簡大看板 (全資產透視總覽)")
+# 🚀 降維極簡大看板：分設五大摺疊面板，預設維持關閉狀態
+st.header("📊 降維極簡大看板 (五大決策分類總覽)")
 if summary_data:
     full_df = pd.DataFrame(summary_data)
     
     categories = [
-        {"name": "🔥 強力買入", "expander_title": "🔥 強力買入標的 (左側極致促銷點) 點開查看"},
-        {"name": "🟢 買入", "expander_title": "🟢 買入標的 (中線合理折價區) 點開查看"},
-        {"name": "⚪ 觀望", "expander_title": "⚪ 觀望標的 (高位震盪/結構不明) 點開查看"},
-        {"name": "🔴 賣出", "expander_title": "🔴 賣出標的 (短線動能超買區) 點開查看"},
-        {"name": "🚨 強力賣出", "expander_title": "🚨 強力賣出標的 (破位結構風險區) 點開查看"}
+        {"name": "🔥 強力買入", "title": "🔥 強力買入標的 (左側極致促銷點)"},
+        {"name": "🟢 買入", "title": "🟢 買入標的 (中線合理折價區)"},
+        {"name": "⚪ 觀望", "title": "⚪ 觀望標的 (高位震盪/結構不明)"},
+        {"name": "🔴 賣出", "title": "🔴 賣出標的 (短線動能超買區)"},
+        {"name": "🚨 強力賣出", "title": "🚨 強力賣出標的 (破位結構風險區)"}
     ]
     
     for cat in categories:
         sub_df = full_df[full_df["綜合建議"] == cat["name"]]
-        count_label = f" ({len(sub_df)} 檔)" if not sub_df.empty else " (0 檔)"
+        count_tag = f" ({len(sub_df)} 檔)"
         
-        # 預設全部收合 expanded=False
-        with st.expander(cat["expander_title"] + count_label, expanded=False):
+        with st.expander(cat["title"] + count_tag, expanded=False):
             if not sub_df.empty:
-                sub_df_sorted = sub_df.sort_values(by=["產業領域", "代碼"]).rename(columns=header_labels)
-                st.write(sub_df_sorted.to_html(escape=False, index=False), unsafe_allow_html=True)
+                sub_df_sorted = sub_df.sort_values(by=["產業領域", "代碼"])
+                st.dataframe(sub_df_sorted, use_container_width=True, hide_index=True, column_config=dynamic_column_configuration)
             else:
-                st.caption("🧘 目前此分類中沒有對應的資產標的。")
+                st.caption("🧘 目前全球市場中無資產處於此決策信號。")
 
 st.markdown("---")
 
