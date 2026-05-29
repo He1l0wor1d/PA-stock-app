@@ -114,7 +114,7 @@ def calculate_rsi(series, period=14):
 @st.cache_data(ttl=21600)
 def calculate_wallstreet_fair_range(ticker_symbol, info, current_price, shiller_pe=31.5):
     try:
-        if ticker_symbol in ["QQQ", "SMH", "SPY", "0050.TW", "MAGS", "XSD", "SOXX"]:
+        if ticker_symbol in ["QQQ", "SMH", "SPY", "0050.TW", "MAGS", "XSD", "SOXX", "BITO"]:
             discount_factor = 26.5 / shiller_pe if shiller_pe > 0 else 0.85
             mid_fv = current_price * min(max(discount_factor, 0.65), 1.15)
             return mid_fv * 0.9, mid_fv * 1.1
@@ -164,28 +164,24 @@ def load_spy_data(start_str):
 def fetch_institutional_and_fcf_data(ticker_symbol, info):
     try:
         stock = yf.Ticker(ticker_symbol)
-        
-        # 【修正核心】直接從財報表拿：營運現金流 - 資本支出 = 真正的自由現金流
         cashflow_df = stock.cashflow
         if 'Free Cash Flow' in cashflow_df.index:
             fcf = cashflow_df.loc['Free Cash Flow'].iloc[0]
         else:
-            # 備援手動計算法
             ocf = cashflow_df.loc['Cash Flow From Operating Activities'].iloc[0]
-            capex = cashflow_df.loc['Capital Expenditures'].iloc[0] # 通常為負值
+            capex = cashflow_df.loc['Capital Expenditures'].iloc[0]
             fcf = ocf + capex if capex < 0 else ocf - capex
             
         market_cap = info.get('marketCap')
-        
-        # 🛡️ 貨幣防錯機制：如果發現分子除以分母大於 15%（TSM不可能這麼高），自動判定為台幣美金錯配，除以 32 進行匯率修正
         raw_yield = (fcf / market_cap) * 100
+        
+        # 貨幣對齊防錯
         if ticker_symbol in ["TSM", "2330.TW"] and raw_yield > 15.0:
-            raw_yield = raw_yield / 32.2  # 除以台幣匯率
+            raw_yield = raw_yield / 32.2
             
         fcf_yield_str = f"{raw_yield:.2f}%"
         if raw_yield >= 5.0: fcf_yield_str += " 🔥"
         
-        # 機構持股比率保持不變
         inst_percent = info.get('heldPercentInstitutions')
         inst_str = f"{inst_percent * 100:.1f}%" if inst_percent else "🔍 需查 13F"
         if inst_percent and inst_percent >= 0.75: inst_str += " 🏦"
@@ -268,8 +264,11 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             
     return sparse_strong_buy, low_absorb_bound
 
-# 全量股票資料庫初始化
+# ==============================================================================
+# 🎯 全量股票資料庫 (已完全加入川普概念股分類)
+# ==============================================================================
 INITIAL_SECTOR_MAP = {
+    "DJT": "川普概念股", "GEO": "川普概念股", "BITO": "川普概念股", "XOM": "川普概念股", "OXY": "川普概念股", # 👑 川普概念核心
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
     "AXTI": "晶圓代工製程", "SIMO": "晶圓代工製程", "ALAB": "晶圓代工製程", "SMH": "晶圓代工製程",
@@ -288,7 +287,6 @@ INITIAL_SECTOR_MAP = {
     "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", "2382.TW": "AI巨頭與軟體", "CBRS": "AI巨頭與軟體",
     "ARKX": "航太太空國防", "NASA": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
     "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", "ONDS": "航太太空國防",
-    "XOM": "傳統能源礦產", "OXY": "傳統能源礦產", "EQT": "傳統能源礦產",
     "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技",
     "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
     "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理",
@@ -300,9 +298,11 @@ INITIAL_SECTOR_MAP = {
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=["TSM", "NVDA", "AAPL", "MSFT", "QQQ"])
+# 💡 修正點：預設開啟名單同步放大，包含原本的核心群組與最新川普概念股
+default_active = ["TSM", "NVDA", "AAPL", "MSFT", "QQQ", "0050.TW", "2330.TW", "DJT", "TSLA", "BITO", "XOM", "GEO"]
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=[t for t in default_active if t in all_current_tickers])
 
-# 🎮 策略控制
+# 🎮 策略快速情境預設
 st.sidebar.header("🎯 策略快速情境預設")
 if "p_atr" not in st.session_state: st.session_state.p_atr = 1.5
 if "p_rsi" not in st.session_state: st.session_state.p_rsi = 35.0
@@ -412,12 +412,12 @@ with st.spinner("正在同步全球資產核心信號與投行多因子估值模
             summary_data.append(row_data)
         except Exception: pass
 
-# HTML 懸停表頭標籤設置
+# HTML 懸停註釋標籤設置
 header_labels = {
     "產業領域": "產業領域", "代碼": "代碼", "綜合建議": "綜合建議", "當前現價": "當前現價",
-    "合理價值區間": '<span title="基於葛拉漢修正公式與機構共識多因子混合計算法，給予上下10%的客觀內在價值緩衝區帶。">合理價值區間 ℹ️</span>',
-    "自由現金流收益率": '<span title="每股自由現金流 / 當前股價。大於 5% 視為具備極為強大的庫藏股回購潛力與左側安全邊際。">自由現金流收益率 (FCF Yield) ℹ️</span>',
-    "機構法人持股比例": '<span title="頂級共同基金與機構法人持股總比重。高於 75% 代表為華爾街主流籌碼控盤核心。">機構法人持股比例 ℹ️</span>',
+    "合理價值區間": '<span title="基於葛拉漢修正公式與華爾街多因子混合估值模型計算，給予上下10%的公平內在價值區間帶。">合理價值區間 ℹ️</span>',
+    "自由現金流收益率": '<span title="每股自由現金流 / 當前股價。代表公司實打實可支配的淨現金收益率，大於 5% 視為具備強大回購燃料的安全邊際。">自由現金流收益率 (FCF Yield) ℹ️</span>',
+    "機構法人持股比例": '<span title="頂級共同基金與對沖基金持股總比重。高於 75% 代表為華爾街大錢全面主導的核心控盤標的。">機構法人持股比例 ℹ️</span>',
     "系統掛單買點": "系統掛單買點", "市場狀態": "市場狀態"
 }
 
@@ -445,7 +445,7 @@ if summary_data:
 st.markdown("---")
 
 # ==============================================================================
-# 🔍 補回：個股動態決策軌道與歷史 K 線繪製
+# 🔍 個股動態決策軌道與歷史 K 線繪製
 # ==============================================================================
 st.header("🔍 個股動態決策軌道與歷史驗證")
 sorted_tickers = sorted(active_tickers)
@@ -496,7 +496,7 @@ if selected_stock:
     except Exception as e: st.error(f"分析載入失敗: {e}")
 
 # ==============================================================================
-# ⏳ 補回：策略回測績效驗證
+# ⏳ 策略回測績效驗證
 # ==============================================================================
 st.markdown("---")
 st.header("⏳ 策略回測績效驗證")
