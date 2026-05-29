@@ -175,7 +175,6 @@ def fetch_institutional_and_fcf_data(ticker_symbol, info):
         market_cap = info.get('marketCap')
         raw_yield = (fcf / market_cap) * 100
         
-        # 貨幣對齊防錯
         if ticker_symbol in ["TSM", "2330.TW"] and raw_yield > 15.0:
             raw_yield = raw_yield / 32.2
             
@@ -265,10 +264,13 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
     return sparse_strong_buy, low_absorb_bound
 
 # ==============================================================================
-# 🎯 全量股票資料庫 (已完全加入川普概念股分類)
+# 🎯 全量股票資料庫 (擴充完整川普概念股標的)
 # ==============================================================================
 INITIAL_SECTOR_MAP = {
-    "DJT": "川普概念股", "GEO": "川普概念股", "BITO": "川普概念股", "XOM": "川普概念股", "OXY": "川普概念股", # 👑 川普概念核心
+    # 👑 川普概念股全系列深度擴充
+    "DJT": "川普概念股", "GEO": "川普概念股", "BITO": "川普概念股", "XOM": "川普概念股", "OXY": "川普概念股",
+    "DELL": "川普概念股", "UMAC": "川普概念股", "PLTR": "川普概念股", "RUM": "川普概念股", "BABA": "川普概念股",
+    # 核心科技與基建板塊
     "TSM": "晶圓代工製程", "ASML": "晶圓代工製程", "AMAT": "晶圓代工製程", "LRCX": "晶圓代工製程", 
     "FORM": "晶圓代工製程", "INTC": "晶圓代工製程", "SNPS": "晶圓代工製程", "TSEM": "晶圓代工製程", 
     "AXTI": "晶圓代工製程", "SIMO": "晶圓代工製程", "ALAB": "晶圓代工製程", "SMH": "晶圓代工製程",
@@ -298,12 +300,11 @@ INITIAL_SECTOR_MAP = {
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-# 💡 修正點：預設開啟名單同步放大，包含原本的核心群組與最新川普概念股
+# 預設追蹤群組全面同步加載
+default_active = ["TSM", "NVDA", "AAPL", "MSFT", "QQQ", "0050.TW", "DJT", "TSLA", "BITO", "DELL", "UMAC", "XOM", "GEO", "PLTR"]
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=[t for t in default_active if t in all_current_tickers])
 
-all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
-
-# 🎮 策略快速情境預設
+# 🎮 策略控制
 st.sidebar.header("🎯 策略快速情境預設")
 if "p_atr" not in st.session_state: st.session_state.p_atr = 1.5
 if "p_rsi" not in st.session_state: st.session_state.p_rsi = 35.0
@@ -342,12 +343,12 @@ action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 
 
 spy_df_global = load_spy_data(start_date)
 
-# 核心即時大盤掃描
+# 核心運算迴圈
 with st.spinner("正在同步全球資產核心信號與投行多因子估值模型..."):
     for ticker in active_tickers:
         try:
             ticker_sector = INITIAL_SECTOR_MAP.get(ticker, "未分類")
-            is_tw = ".TW" in ticker or ".TWO" in ticker
+            is_tw = ".TW" in ticker
             currency_symbol = "NT$ " if is_tw else "$ "
             
             stock = yf.Ticker(ticker)
@@ -397,29 +398,30 @@ with st.spinner("正在同步全球資產核心信號與投行多因子估值模
             fv_low, fv_high = calculate_wallstreet_fair_range(ticker, stock.info, current_price, shiller_pe=shiller_pe_val)
             fcf_yield_str, institutional_str = fetch_institutional_and_fcf_data(ticker, stock.info)
 
+            # 🛠 【修正順序】將系統掛單買點、市場狀態調整至當前現價之後
             row_data = {
                 "產業領域": ticker_sector,
                 "代碼": ticker,
                 "綜合建議": final_action,
                 "當前現價": f"{currency_symbol}{current_price:.1f}",
+                "系統掛單買點": f"{currency_symbol}{calculated_entry_target:.1f}", 
+                "市場狀態": market_state,
                 "合理價值區間": f"{currency_symbol}{fv_low:.1f} - {fv_high:.1f}",
                 "自由現金流收益率": fcf_yield_str,
-                "機構法人持股比例": institutional_str,
-                "系統掛單買點": f"{currency_symbol}{calculated_entry_target:.1f}", 
-                "市場狀態": market_state
+                "機構法人持股比例": institutional_str
             }
 
             if final_action in ["🔥 強力買入", "🟢 買入"]: action_alerts.append(row_data)
             summary_data.append(row_data)
         except Exception: pass
 
-# HTML 懸停註釋標籤設置
+# HTML 懸停註釋表頭設定 (欄位排列對齊 row_data)
 header_labels = {
     "產業領域": "產業領域", "代碼": "代碼", "綜合建議": "綜合建議", "當前現價": "當前現價",
+    "系統掛單買點": "系統掛單買點", "市場狀態": "市場狀態",
     "合理價值區間": '<span title="基於葛拉漢修正公式與華爾街多因子混合估值模型計算，給予上下10%的公平內在價值區間帶。">合理價值區間 ℹ️</span>',
     "自由現金流收益率": '<span title="每股自由現金流 / 當前股價。代表公司實打實可支配的淨現金收益率，大於 5% 視為具備強大回購燃料的安全邊際。">自由現金流收益率 (FCF Yield) ℹ️</span>',
-    "機構法人持股比例": '<span title="頂級共同基金與對沖基金持股總比重。高於 75% 代表為華爾街大錢全面主導的核心控盤標的。">機構法人持股比例 ℹ️</span>',
-    "系統掛單買點": "系統掛單買點", "市場狀態": "市場狀態"
+    "機構法人持股比例": '<span title="頂級共同基金與對沖基金持股總比重。高於 75% 代表為華爾街大錢全面主導的核心控盤標的。">機構法人持股比例 ℹ️</span>'
 }
 
 # ==============================================================================
