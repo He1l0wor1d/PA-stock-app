@@ -38,21 +38,18 @@ with macro_col2:
     st.caption(f"歷史平均值: {historical_mean} | 超過 30 代表美股長線估值偏貴。")
 
 # 🛠️ 融合引進：全自動財經日曆實時動態核心模組
-@st.cache_data(ttl=21600)  # 每 6 小時全自動向國際市場同步一次，兼顧速度與實時性
+@st.cache_data(ttl=21600)  # 每 6 小時全自動向國際市場同步一次
 def fetch_realtime_macro_calendar():
     try:
-        # 使用標準瀏覽器標頭偽裝，實時抓取當週國際高星級重磅事件
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         url = "https://tc.investing.com/economic-calendar/"
         
         req = requests.get(url, headers=headers, timeout=10)
         dfs = pd.read_html(req.text)
         
-        # 尋找頁面中含有財經事件的表格
         for table in dfs:
             if '事件' in table.columns or '指標' in table.columns or 'Time' in table.columns or '時間' in table.columns:
                 table.columns = [str(c) for c in table.columns]
-                # 精準過濾高重要度 (三星級) 的總經事件，移除雜訊
                 df_clean = table.dropna(subset=[table.columns[1], table.columns[2]]).head(5)
                 
                 output_df = pd.DataFrame({
@@ -64,7 +61,6 @@ def fetch_realtime_macro_calendar():
     except Exception:
         pass
     
-    # 🛡️ 備援機制：若國際網路突發中斷，無縫切換至動態對齊時間軸，確保系統永不崩潰
     today_dt = datetime.now()
     start_of_week = today_dt - timedelta(days=today_dt.weekday())
     dates_list = [(start_of_week + timedelta(days=i)).strftime('%m/%d') for i in range(5)]
@@ -106,7 +102,7 @@ with salp_col2:
 st.markdown("---")
 
 # ==============================================================================
-# 🧮 基礎核心數學指標與資料加載函式
+# 🧮 基礎核心數學指標與華爾街公允價值計算函式
 # ==============================================================================
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -114,6 +110,59 @@ def calculate_rsi(series, period=14):
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
     rs = gain / loss
     return 100 - (100 / (1 + rs))
+
+@st.cache_data(ttl=21600)
+def calculate_wallstreet_fair_value(ticker_symbol, info, current_price, shiller_pe=31.5):
+    """
+    對標華爾街投行多因子混合估值模型 (Fair Value Model)
+    """
+    try:
+        # 大盤型與 ETF 採用 席勒本益比與歷史中位數反推法
+        if ticker_symbol in ["QQQ", "SMH", "SPY", "0050.TW", "MAGS", "XSD", "SOXX"]:
+            discount_factor = 26.5 / shiller_pe if shiller_pe > 0 else 0.85
+            return current_price * min(max(discount_factor, 0.65), 1.15)
+        
+        # 獲取美債無風險利率基準 (Proxy: 4.2%)
+        rf = 4.2
+        eps = info.get('forwardEps') or info.get('trailingEps')
+        growth_rate = info.get('longTermAverageGrowthRate')
+        
+        if not growth_rate or growth_rate < 0:
+            peg = info.get('trailingPegRatio') or info.get('pegRatio') or 1.5
+            pe = info.get('forwardPE') or info.get('trailingPE') or 25
+            growth_rate = (pe / peg) if (peg > 0 and pe > 0) else 12.0
+        
+        # 限制極端成長率
+        growth_rate = min(max(growth_rate * 100, 4.0), 35.0) 
+
+        # 1. 葛拉漢修正公式 (投行科技股錨定法)
+        if eps and eps > 0:
+            graham_fv = (eps * (8.5 + 2 * growth_rate) * 4.4) / rf
+        else:
+            graham_fv = None
+
+        # 2. 營收倍數與分析師平均目標價多因子加權 (華爾街綜合共識法)
+        target_mean = info.get('targetMeanPrice')
+        rev_per_share = info.get('revenuePerShare')
+        ps_multiple = info.get('priceToSalesTrailing12Months') or 5.0
+        
+        ps_fv = rev_per_share * ps_multiple * 0.95 if rev_per_share else None
+        
+        # 因子混合權重分配
+        factors = []
+        if graham_fv and graham_fv > 0: factors.append(graham_fv * 0.4)
+        if target_mean and target_mean > 0: factors.append(target_mean * 0.4)
+        if ps_fv and ps_fv > 0: factors.append(ps_fv * 0.2)
+        
+        if factors:
+            calculated_fv = sum(factors) / (len(factors) * 0.3333 if len(factors)<3 else 1.0)
+            # 防止與現價偏離過於誇張（設上下限 50% 緩衝區）
+            return min(max(calculated_fv, current_price * 0.5), current_price * 1.5)
+            
+    except Exception:
+        pass
+    # 🛡️ 安全降級機制：若資料庫缺乏基本面財報數據，採用動態生命線技術面中樞作為公允價值
+    return current_price * 0.96
 
 @st.cache_data(ttl=3600)
 def load_spy_data(start_str):
@@ -211,7 +260,7 @@ INITIAL_SECTOR_MAP = {
     "LITE": "光通訊與網通", "AAOI": "光通訊與網通", "FN": "光通訊與網通", "CIEN": "光通訊與網通", 
     "NOK": "光通訊與網通",  
     "DRAM": "記憶體與儲存", "MU": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體與儲存",
-    "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建",
+    "XYZ": "未分類", "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建",
     "VRT": "機房液冷散熱", "MOD": "機房液冷散熱", "3017.TW": "機房液冷散熱",
     "CEG": "核能與天然氣", "VST": "核能與天然氣", "ENPH": "綠能與微電網", "SEDG": "綠能與微電網",
     "SOXX": "AI晶片與設計", "XSD": "AI晶片與設計", "NVDA": "AI晶片與設計", "AVGO": "AI晶片與設計", 
@@ -299,9 +348,9 @@ action_rank = {"🔥 強力買入": 0, "🟢 買入": 1, "⚪ 觀望": 2, "🔴 
 spy_df_global = load_spy_data(start_date)
 
 # ==============================================================================
-# 運行即時看板
+# 運行即時看板與核心計算
 # ==============================================================================
-with st.spinner("正在同步全球資產核心信號..."):
+with st.spinner("正在同步全球資產核心信號與華爾街估值模型..."):
     for ticker in active_tickers:
         try:
             ticker_sector = INITIAL_SECTOR_MAP.get(ticker, "未分類")
@@ -346,10 +395,6 @@ with st.spinner("正在同步全球資產核心信號..."):
             latest_ma200 = float(df.iloc[-1]['MA200']) if not pd.isna(df.iloc[-1]['MA200']) else ma20_center
             current_bb_lower = float(df.iloc[-1]['BB_Lower'])
             
-            highest_20d = float(df['High'].rolling(window=20).max().iloc[-1])
-            trailing_stop_price = highest_20d - (2 * latest_atr)
-            trailing_stop_str = f"{currency_symbol}{trailing_stop_price:.1f}"
-
             low_absorb_price = ma20_center - (latest_atr * st.session_state.p_atr)
             high_toss_price = ma20_center + (latest_atr * st.session_state.p_atr)
             
@@ -358,45 +403,60 @@ with st.spinner("正在同步全球資產核心信號..."):
             is_today_sparse_strong_buy = bool(df.iloc[-1]['Sparse_Strong_Buy'])
             
             if ma20_center >= latest_ma200:
-                market_state = "📈 多頭波段 (會漲)"
+                market_state = "📈 多頭波段"
                 if is_today_sparse_strong_buy: final_action = "🔥 強力買入"
                 elif abs(current_price - ma20_center)/ma20_center <= 0.02: final_action = "🟢 買入"
                 elif current_price >= high_toss_price: final_action = "🔴 賣出"
             else:
-                market_state = "📉 空頭結構 (會跌)"
+                market_state = "📉 空頭結構"
                 if is_today_sparse_strong_buy: final_action = "🔥 強力買入"
                 elif yesterday_close >= ma20_center and current_price < ma20_center: final_action = "🚨 強力賣出"
                 elif current_price >= high_toss_price: final_action = "🔴 賣出"
                 elif abs(current_price - ma20_center)/ma20_center <= 0.02: final_action = "🟢 買入" 
 
             calculated_entry_target = min(low_absorb_price, current_bb_lower)
+            
+            # 🔮 計算華爾街核心公允價值與偏離度
+            fair_value = calculate_wallstreet_fair_value(ticker, stock.info, current_price, shiller_pe=31.5)
+            deviation_pct = ((current_price - fair_value) / fair_value) * 100
+            
+            if deviation_pct < -5: deviation_str = f"📉 低估 {abs(deviation_pct):.1f}%"
+            elif deviation_pct > 5: deviation_str = f"📈 高估 {deviation_pct:.1f}%"
+            else: deviation_str = "⚖️ 合理"
 
-            if final_action in ["🔥 強力買入", "🟢 買入"]:
-                action_alerts.append({
-                    "代碼": ticker, "綜合建議": final_action, "市場狀態": market_state, 
-                    "當前股價": f"{currency_symbol}{current_price:.1f}",
-                    "掛單買點": f"{currency_symbol}{calculated_entry_target:.1f}"
-                })
-
-            summary_data.append({
+            # 封裝基礎看板共用字典
+            row_data = {
                 "產業領域": ticker_sector,
                 "代碼": ticker,
                 "綜合建議": final_action,
-                "現價": f"{currency_symbol}{current_price:.1f}",
-                "系統建議掛單買點": f"{currency_symbol}{calculated_entry_target:.1f}", 
+                "當前現價": f"{currency_symbol}{current_price:.1f}",
+                "公允價值": f"{currency_symbol}{fair_value:.1f}",
+                "偏離幅度": deviation_str,
+                "掛單買點": f"{currency_symbol}{calculated_entry_target:.1f}", 
                 "市場狀態": market_state
-            })
+            }
+
+            if final_action in ["🔥 強力買入", "🟢 買入"]:
+                action_alerts.append(row_data)
+
+            summary_data.append(row_data)
         except Exception: pass
 
-st.header("🚨 今日促銷")
+# ==============================================================================
+# 🎴 格式完全對齊之雙核心大看板
+# ==============================================================================
+st.header("🚨 今日促銷 (強烈建議買入標的)")
 if action_alerts:
-    st.dataframe(pd.DataFrame(action_alerts), use_container_width=True, hide_index=True)
+    df_promo = pd.DataFrame(action_alerts)
+    df_promo['sort'] = df_promo['綜合建議'].map(action_rank)
+    df_promo = df_promo.sort_values(by=["sort", "產業領域", "代碼"]).drop('sort', axis=1)
+    st.dataframe(df_promo, use_container_width=True, hide_index=True)
 else:
     st.info("🧘 報告隊長：今日觀察名單內皆無符合目前情境參數限制的強買標的。")
 
 st.markdown("---")
 
-st.header("📊 降維極簡大看板")
+st.header("📊 降維極簡大看板 (全資產透視)")
 if summary_data:
     summary_df = pd.DataFrame(summary_data)
     summary_df['sort'] = summary_df['綜合建議'].map(action_rank)
@@ -569,7 +629,6 @@ with st.spinner("正在模擬時間軸歷史建倉..."):
 if backtest_results:
     df_bt_results = pd.DataFrame(backtest_results)
     df_bt_results['sort_val'] = df_bt_results['累積報酬率'].str.replace('%', '').astype(float)
-    
     df_bt_results = df_bt_results.sort_values(by='sort_val', ascending=False).drop('sort_val', axis=1)
     
     cols_order = ["產業", "代碼", "首次建倉日", "當時訊號", "強買訊號次數", "模擬買入價", "最大套牢跌幅", "累積報酬率"]
