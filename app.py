@@ -163,14 +163,29 @@ def load_spy_data(start_str):
 @st.cache_data(ttl=21600)
 def fetch_institutional_and_fcf_data(ticker_symbol, info):
     try:
-        fcf = info.get('freeCashflow')
-        market_cap = info.get('marketCap')
-        fcf_yield_str = "⌛ 載入中"
-        if fcf and market_cap and market_cap > 0:
-            fcf_yield = (fcf / market_cap) * 100
-            fcf_yield_str = f"{fcf_yield:.2f}%"
-            if fcf_yield >= 5.0: fcf_yield_str += " 🔥"
+        stock = yf.Ticker(ticker_symbol)
         
+        # 【修正核心】直接從財報表拿：營運現金流 - 資本支出 = 真正的自由現金流
+        cashflow_df = stock.cashflow
+        if 'Free Cash Flow' in cashflow_df.index:
+            fcf = cashflow_df.loc['Free Cash Flow'].iloc[0]
+        else:
+            # 備援手動計算法
+            ocf = cashflow_df.loc['Cash Flow From Operating Activities'].iloc[0]
+            capex = cashflow_df.loc['Capital Expenditures'].iloc[0] # 通常為負值
+            fcf = ocf + capex if capex < 0 else ocf - capex
+            
+        market_cap = info.get('marketCap')
+        
+        # 🛡️ 貨幣防錯機制：如果發現分子除以分母大於 15%（TSM不可能這麼高），自動判定為台幣美金錯配，除以 32 進行匯率修正
+        raw_yield = (fcf / market_cap) * 100
+        if ticker_symbol in ["TSM", "2330.TW"] and raw_yield > 15.0:
+            raw_yield = raw_yield / 32.2  # 除以台幣匯率
+            
+        fcf_yield_str = f"{raw_yield:.2f}%"
+        if raw_yield >= 5.0: fcf_yield_str += " 🔥"
+        
+        # 機構持股比率保持不變
         inst_percent = info.get('heldPercentInstitutions')
         inst_str = f"{inst_percent * 100:.1f}%" if inst_percent else "🔍 需查 13F"
         if inst_percent and inst_percent >= 0.75: inst_str += " 🏦"
