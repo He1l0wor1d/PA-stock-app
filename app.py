@@ -225,7 +225,7 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
         is_dry_falling = (current_close < df.loc[date, 'MA5']) and (df.loc[date, 'MA5'] < df.loc[date, 'MA20_actual'])
         
         if is_dry_falling:
-            if not is_premium_asset and is_high_risk_asset nudge and individual_buy_counter >= 2: continue  
+            if not is_premium_asset and is_high_risk_asset and individual_buy_counter >= 2: continue  
             if is_premium_asset and individual_buy_counter >= 4: continue  
                 
         if is_triggered and rsi_cond.loc[date]:
