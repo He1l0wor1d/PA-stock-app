@@ -301,8 +301,8 @@ if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_S
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 # 預設追蹤群組全面同步加載
-default_active = ["TSM", "NVDA", "AAPL", "MSFT", "QQQ", "0050.TW", "DJT", "TSLA", "BITO", "DELL", "UMAC", "XOM", "GEO", "PLTR"]
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=[t for t in default_active if t in all_current_tickers])
+
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
 
 # 🎮 策略控制
 st.sidebar.header("🎯 策略快速情境預設")
