@@ -299,8 +299,9 @@ if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_S
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 # 💡 修正點：預設開啟名單同步放大，包含原本的核心群組與最新川普概念股
-default_active = ["TSM", "NVDA", "AAPL", "MSFT", "QQQ", "0050.TW", "2330.TW", "DJT", "TSLA", "BITO", "XOM", "GEO"]
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=[t for t in default_active if t in all_current_tickers])
+
+all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
 
 # 🎮 策略快速情境預設
 st.sidebar.header("🎯 策略快速情境預設")
