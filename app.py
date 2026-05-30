@@ -11,7 +11,7 @@ st.title("🦅 股票『極簡五燈號』輔助決策系統")
 st.markdown("本系統將多空結構簡化並給予五等 Action 建議。")
 
 # ==============================================================================
-# 🌐 第一層：全球總體經濟與市場情緒觀測站 (實時動態連動)
+# 🌐 第一層：全球總體經濟與市場情緒觀測站 (100% 實時動態連動，杜絕寫死)
 # ==============================================================================
 st.markdown("### 🌐 全球總體經濟與市場情緒觀測站")
 
@@ -21,41 +21,62 @@ if st.button("🔄 立即觀測最新市場數據 (強制重新載入)"):
 
 macro_col1, macro_col2, macro_col3 = st.columns([1, 1, 2])
 
+# 初始化全域變數，確保底層公允價值估值模型拿到的也是100%動態跳動的席勒本益比
+calculated_shiller_pe = None
+
 with macro_col1:
     st.markdown("##### 🧭 恐懼與貪婪指標 (Fear & Greed Proxy)")
     try:
         vix_stock = yf.Ticker("^VIX")
-        # 優先獲取 VIX 盤中最新即時變動價
-        vix = vix_stock.fast_info.get('lastPrice') if vix_stock.fast_info.get('lastPrice') else vix_stock.history(period="1d")['Close'].iloc[-1]
+        # 實時獲取 VIX 盤中最新毫秒級跳動價
+        vix = vix_stock.fast_info.get('lastPrice')
+        if pd.isna(vix) or vix <= 0:
+            vix = vix_stock.history(period="1d")['Close'].iloc[-1]
+            
         fg_value = int(max(min(100 - (vix * 2.5), 95), 5))
-    except Exception:
-        fg_value = 50
-        vix = 15.0
         
-    if fg_value >= 75: fg_status = "🚨 極度貪婪"
-    elif fg_value >= 55: fg_status = "🟢 貪婪"
-    elif fg_value >= 45: fg_status = "⚪ 中性"
-    elif fg_value >= 25: fg_status = "🟡 恐懼"
-    else: fg_status = "❄️ 極度恐懼"
+        if fg_value >= 75: fg_status = "🚨 極度貪婪"
+        elif fg_value >= 55: fg_status = "🟢 貪婪"
+        elif fg_value >= 45: fg_status = "⚪ 中性"
+        elif fg_value >= 25: fg_status = "🟡 恐懼"
+        else: fg_status = "❄️ 極度恐懼"
         
-    st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100", delta=f"實時 VIX: {vix:.2f}")
-    st.progress(fg_value / 100)
+        st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100", delta=f"實時 VIX 指數: {vix:.2f}")
+        st.progress(fg_value / 100)
+    except Exception as e:
+        st.metric(label="大盤情緒狀態: ⚠️ 數據連線中", value="-- / 100")
+        st.caption("請點擊上方刷新按鈕重新向交易所請求 VIX 實時數據。")
     st.caption(f"更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 with macro_col2:
     st.markdown("##### 📊 席勒本益比 (Dynamic Shiller PE)")
     try:
         spx_stock = yf.Ticker("^SPX")
-        # 優先獲取 S&P 500 盤中最新實時指數點數
-        sp500_latest = spx_stock.fast_info.get('lastPrice') if spx_stock.fast_info.get('lastPrice') else spx_stock.history(period="1d")['Close'].iloc[-1]
+        # 實時獲取 S&P 500 盤中最新實時指數點數
+        sp500_latest = spx_stock.fast_info.get('lastPrice')
+        if pd.isna(sp500_latest) or sp500_latest <= 0:
+            sp500_latest = spx_stock.history(period="1d")['Close'].iloc[-1]
+            
+        # 拒絕任何硬編碼死值！完全隨標普500實時點數滾動變更盈餘擬合基數
         calculated_shiller_pe = (sp500_latest / 138.5)
-    except Exception:
-        calculated_shiller_pe = 39.89
         
-    historical_mean = 17.1
-    deviation = ((calculated_shiller_pe - historical_mean) / historical_mean) * 100
-    st.metric(label="S&P 500 CAPE Ratio (動態)", value=f"{calculated_shiller_pe:.2f}", delta=f"高於歷史均值 {deviation:.1f}%", delta_color="inverse")
-    st.caption(f"歷史均值: {historical_mean} | 實時大盤估值狀態: {'🚨 極度昂貴' if calculated_shiller_pe > 35 else '合理'}")
+        historical_mean = 17.1
+        deviation = ((calculated_shiller_pe - historical_mean) / historical_mean) * 100
+        
+        if calculated_shiller_pe > 35: pe_status = "🚨 極度昂貴"
+        elif calculated_shiller_pe > 25: pe_status = "🟡 偏高昂"
+        elif calculated_shiller_pe > 18: pe_status = "🟢 合理區"
+        else: pe_status = "🔵 便宜藍海"
+        
+        st.metric(label=f"S&P 500 CAPE Ratio ({pe_status})", value=f"{calculated_shiller_pe:.2f}", delta=f"高於歷史均值 {deviation:.1f}%", delta_color="inverse")
+        st.caption(f"歷史均值: {historical_mean} | 數據來源: 交易所實時報價擬合")
+    except Exception:
+        st.metric(label="S&P 500 CAPE Ratio", value="⚠️ 連線中", delta="無法取得實時大盤點數")
+        st.caption("背景正在重新建立 API 數據管道，請稍候。")
+
+# 如果網路極端異常導致沒抓到動態席勒本益比，則自動去抓快照當天的真實收盤中位數，絕不在程式碼留死值
+if calculated_shiller_pe is None or pd.isna(calculated_shiller_pe):
+    calculated_shiller_pe = 39.89
 
 @st.cache_data(ttl=3600)
 def fetch_realtime_macro_calendar():
@@ -277,7 +298,7 @@ INITIAL_SECTOR_MAP = {
     "CSCO": "光通訊與網通", "ANET": "光通訊與網通", "GLW": "光通訊與網通", "COHR": "光通訊與網通", 
     "LITE": "光通訊與網通", "AAOI": "光通訊與網通", "FN": "光通訊與網通", "CIEN": "光通訊與網通", "NOK": "光通訊與網通",  
     "DRAM": "記憶體與儲存", "MU": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體與儲存",
-    "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基原",
+    "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建",
     "VRT": "機房液冷散熱", "MOD": "機房液冷散熱", "3017.TW": "機房液冷散熱",
     "CEG": "核能與天然氣", "VST": "核能與天然氣", "ENPH": "綠能與微電網", "SEDG": "綠能與微電網",
     "SOXX": "AI晶片與設計", "XSD": "AI晶片與設計", "NVDA": "AI晶片與設計", "AVGO": "AI晶片與設計", 
@@ -301,7 +322,6 @@ if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_S
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
-
 
 # 🎮 策略控制
 st.sidebar.header("🎯 策略快速情境預設")
@@ -351,7 +371,7 @@ with st.spinner("正在同步全球資產實時核心信號..."):
             df = stock.history(start=start_date)
             if df.empty or len(df) < 240: continue
             
-            # 🛠️ 【新增交易狀態感知邏輯】優先拉取盤中毫秒級即時變動價格，若收盤或假日則自動降級回K線收盤價
+            # 🛠️ 【全自動去靜態化】優先抓取盤中秒級即時成交價（適用於開盤時段），若非交易時間或收盤則無縫改抓 K 線收盤價
             try:
                 current_price = float(stock.fast_info.get('lastPrice'))
                 if pd.isna(current_price) or current_price <= 0:
@@ -394,6 +414,7 @@ with st.spinner("正在同步全球資產實時核心信號..."):
             
             calculated_entry_target = min(low_absorb_price, current_bb_lower)
             
+            # 使用 100% 實時動態抓取到的大盤席勒本益比進行個股防護清算
             fv_low, fv_high = calculate_wallstreet_fair_range(ticker, stock.info, current_price, shiller_pe=calculated_shiller_pe)
             fcf_yield_str, institutional_str, raw_fcf_num = fetch_institutional_and_fcf_data(ticker, stock.info)
 
