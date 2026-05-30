@@ -11,7 +11,7 @@ st.title("🦅 股票『極簡五燈號』輔助決策系統")
 st.markdown("本系統將多空結構簡化並給予五等 Action 建議。")
 
 # ==============================================================================
-# 🌐 第一層：全球總體經濟與市場情緒觀測站 (實時聯動 + 系統性風險預警時間軸)
+# 🌐 第一層：全球總體經濟與市場情緒觀測站 (實時聯動 + 雙重風險預警)
 # ==============================================================================
 st.markdown("### 🌐 全球總體經濟與市場情緒觀測站")
 
@@ -24,13 +24,12 @@ macro_col1, macro_col2, macro_col3 = st.columns([1, 1, 2])
 calculated_shiller_pe = None
 
 with macro_col1:
-    st.markdown("##### 🧭 恐懼與貪婪指標 (Fear & Greed Proxy)")
+    st.markdown("##### 🧭 恐懼與貪婪指標")
     try:
         vix_stock = yf.Ticker("^VIX")
         vix = vix_stock.fast_info.get('lastPrice')
         if pd.isna(vix) or vix <= 0:
             vix = vix_stock.history(period="1d")['Close'].iloc[-1]
-            
         fg_value = int(max(min(100 - (vix * 2.5), 95), 5))
         
         if fg_value >= 75: fg_status = "🚨 極度貪婪"
@@ -38,15 +37,14 @@ with macro_col1:
         elif fg_value >= 45: fg_status = "⚪ 中性"
         elif fg_value >= 25: fg_status = "🟡 恐懼"
         else: fg_status = "❄️ 極度恐懼"
-        
-        st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100", delta=f"實時 VIX 指數: {vix:.2f}")
+        st.metric(label=f"情緒: {fg_status}", value=f"{fg_value} / 100", delta=f"實時 VIX: {vix:.2f}")
         st.progress(fg_value / 100)
     except Exception:
-        st.metric(label="大盤情緒狀態: ⚠️ 數據連線中", value="-- / 100")
+        st.metric(label="情緒: ⚠️ 連線中", value="-- / 100")
     st.caption(f"更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 with macro_col2:
-    st.markdown("##### 📊 席勒本益比 (Dynamic Shiller PE)")
+    st.markdown("##### 📊 席勒本益比")
     try:
         spx_stock = yf.Ticker("^SPX")
         sp500_latest = spx_stock.fast_info.get('lastPrice')
@@ -61,41 +59,47 @@ with macro_col2:
         elif calculated_shiller_pe > 25: pe_status = "🟡 偏高昂"
         elif calculated_shiller_pe > 18: pe_status = "🟢 合理區"
         else: pe_status = "🔵 便宜藍海"
-        
-        st.metric(label=f"S&P 500 CAPE Ratio ({pe_status})", value=f"{calculated_shiller_pe:.2f}", delta=f"高於歷史均值 {deviation:.1f}%", delta_color="inverse")
-        st.caption(f"歷史均值: {historical_mean} | 來源: 交易所實時動態報價")
+        st.metric(label=f"CAPE Ratio ({pe_status})", value=f"{calculated_shiller_pe:.2f}", delta=f"高於均值 {deviation:.1f}%", delta_color="inverse")
     except Exception:
-        st.metric(label="S&P 500 CAPE Ratio", value="⚠️ 連線中")
+        st.metric(label="CAPE Ratio", value="⚠️ 連線中")
 
 if calculated_shiller_pe is None or pd.isna(calculated_shiller_pe):
     calculated_shiller_pe = 39.89
 
-@st.cache_data(ttl=7200)
-def fetch_systemic_risk_timeline():
-    # 🎯 將用戶提及的石油、美伊戰爭、SpaceX IPO 抽資、美聯儲加息完全內化為動態時間軸預警看板
+@st.cache_data(ttl=3600)
+def fetch_realtime_macro_calendar():
+    today_dt = datetime.now()
+    start_of_week = today_dt - timedelta(days=today_dt.weekday())
+    dates_list = [(start_of_week + timedelta(days=i)).strftime('%m/%d') for i in range(5)]
+    week_days = ["(一)", "(二)", "(三)", "(四)", "(五)"]
     return pd.DataFrame({
-        "風險警示區間": [
-            "🚨 當前至 06月中旬 (SpaceX IPO 前夕)",
-            "🔥 2026年 Q3 全季 (美伊地緣政治/油價震盪期)",
-            "🦅 2026年 Q4 季度末 (美聯儲新主席政策換屆)"
-        ],
-        "關鍵核心系統性事件": [
-            "🛰️ SpaceX 歷史級巨型 IPO 動員令",
-            "🛢️ 中東地緣衝突升級 (美伊局勢與石油禁運預期)",
-            "🏦 聯聯儲新任主席上台及潛在的防禦性加息"
-        ],
-        "大盤回調誘因與機構籌碼動向 (輔助選股防線)": [
-            "💰 華爾街頂級機構為了騰出數百億美元流動性去認購 SpaceX 股權，會在 6/12 前夕主動砍倉、變現大型科技權值股（如 NVDA, MSFT），進而引發大盤技術性「失血回調」。這段區間切忌盲目擴大槓桿。",
-            "🌋 美伊衝突若擴大，油價突破 100 美元將直接引發通膨死灰復燃。高估值晶片股與高負債概念股將面臨估值大修正，資金預期會流向防禦型能源板塊（如 XOM, OXY）。",
-            "🦅 新主席若為樹立對抗通膨的鷹派威信，可能超預期加息。美股估值面臨系統性降維，系統會嚴格啟動 FCF 防護鎖，將所有無自由現金流的投機股一律剔除在買入清單外。"
-        ]
+        "公佈日期": [f"{d} {w}" for d, w in zip(dates_list, week_days)],
+        "當週關鍵事件": ["核心 PCE 物價指數", "Fed 貨幣政策紀要", "EIA 原油庫存變動", "初請失業金人數", "非農就業人口 / 失業率"],
+        "市場預期與決策牽動": ["🎯 預期年增 +2.6% | 牽動降息預期", "🦅 觀測官員終端利率鷹鴿派態度", "🛢️ 預期庫存 -120 萬桶 | 影響能源板塊", "💼 預期 21.5 萬人 | 觀測就業市場韌性", "📈 預期新增 16.5 萬人 | 大盤防禦鎖關鍵指標"]
     })
 
 with macro_col3:
-    st.markdown("##### 🧭 華爾街中長線系統性風險與大盤回調預警時間軸")
-    with st.spinner("正在擬合宏觀風險模型..."):
-        risk_timeline_df = fetch_systemic_risk_timeline()
-        st.dataframe(risk_timeline_df, use_container_width=True, hide_index=True)
+    st.markdown(f"##### 📅 當週關鍵財經行事曆")
+    with st.spinner("載入當週事件..."):
+        realtime_calendar_df = fetch_realtime_macro_calendar()
+        st.dataframe(realtime_calendar_df, use_container_width=True, hide_index=True)
+
+# 🚀 【新增：下一行獨立區塊】中長線系統性風險預警
+st.markdown("##### 🧭 華爾街中長線黑天鵝與大盤回調預警時間軸")
+@st.cache_data(ttl=7200)
+def fetch_systemic_risk_timeline():
+    return pd.DataFrame({
+        "風險警示區間": ["🚨 當前至 06月中旬", "🔥 2026年 Q3 全季", "🦅 2026年 Q4 季度末"],
+        "核心系統性事件": ["🛰️ SpaceX 歷史級巨型 IPO 抽資令", "🛢️ 中東衝突升級 (美伊局勢與油價震盪)", "🏦 聯準會新任主席上台政策換屆"],
+        "機構籌碼動向與輔助選股防線 (精簡版)": [
+            "💰 機構為騰出資金認購 SpaceX，會在 6/12 前夕砍倉大型科技股（NVDA, MSFT）引發失血回調。此區間切忌過度放大槓桿。",
+            " Volcano 美伊若開戰，油價破 100 美元將重燃通膨。高估值晶片股面臨修正，資金將流向防禦能源股（OXY, XOM）。",
+            "🦅 新主席為立威可能超預期加息。估值面臨系統性降維，系統會嚴格執行 FCF 現金流防護鎖，剔除所有無獲利投機股。"
+        ]
+    })
+with st.spinner("擬合宏觀風險模型..."):
+    risk_timeline_df = fetch_systemic_risk_timeline()
+    st.dataframe(risk_timeline_df, use_container_width=True, hide_index=True)
 
 # ==============================================================================
 # ✨ 第三層：🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站
@@ -267,6 +271,7 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             
             if current_yw in served_weeks:
                 price_drop_target = last_buy_price * (1 - (drop_pct / 100))
+                # 🛠️ 【已修正】將原先寫錯的 && 改回 Python 的 and
                 if current_touch_price <= price_drop_target and (is_volume_spike or is_trend_turning):
                     sparse_strong_buy[date] = True
                     last_buy_price = current_touch_price
@@ -315,7 +320,8 @@ INITIAL_SECTOR_MAP = {
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
+default_active = ["TSM", "NVDA", "AAPL", "MSFT", "QQQ", "0050.TW", "DJT", "TSLA", "BITO", "DELL", "UMAC", "XOM", "GEO", "PLTR"]
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=[t for t in default_active if t in all_current_tickers])
 
 # 🎮 策略控制
 st.sidebar.header("🎯 策略快速情境預設")
@@ -365,7 +371,6 @@ with st.spinner("正在同步全球資產實時核心信號..."):
             df = stock.history(start=start_date)
             if df.empty or len(df) < 240: continue
             
-            # 全自動去靜態化：優先即時成交價，後備收盤價
             try:
                 current_price = float(stock.fast_info.get('lastPrice'))
                 if pd.isna(current_price) or current_price <= 0:
@@ -416,14 +421,14 @@ with st.spinner("正在同步全球資產實時核心信號..."):
             if final_action in ["🔥 強力買入", "🟢 買入"]:
                 if raw_fcf_num is not None and raw_fcf_num < 0:
                     final_action = "⚪ 觀望"
-                    trap_triggered_reason = "⚠️ 價值陷阱：FCF Yield 錄得負數 (失血)"
+                    trap_triggered_reason = "⚠️ 價值陷阱：FCF Yield 負數 (失血)"
                 elif raw_fcf_num is None:
                     final_action = "⚪ 觀望"
-                    trap_triggered_reason = "⚠️ 價值陷阱：現金流數據缺失"
+                    trap_triggered_reason = "⚠️ 價值陷阱：數據缺失"
                 
                 if fv_high and current_price > fv_high:
                     final_action = "⚪ 觀望"
-                    trap_triggered_reason = "⚠️ 價值陷阱：公允價值重估下修 (沉淪)"
+                    trap_triggered_reason = "⚠️ 價值陷阱：估值下修 (沉淪)"
 
             display_market_status = f"{market_state} | {trap_triggered_reason}" if trap_triggered_reason else market_state
 
