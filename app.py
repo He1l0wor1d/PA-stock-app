@@ -185,9 +185,9 @@ def fetch_institutional_and_fcf_data(ticker_symbol, info):
         inst_str = f"{inst_percent * 100:.1f}%" if inst_percent else "🔍 需查 13F"
         if inst_percent and inst_percent >= 0.75: inst_str += " 🏦"
             
-        return fcf_yield_str, inst_str
+        return fcf_yield_str, inst_str, raw_yield
     except:
-        return "⚠️ 資料暫缺", "🔍 需查 13F"
+        return "⚠️ 資料暫缺", "🔍 需查 13F", None
 
 def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_market_fil, ticker_symbol):
     df = df_data.copy()
@@ -295,7 +295,8 @@ INITIAL_SECTOR_MAP = {
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
+default_active = ["TSM", "NVDA", "AAPL", "MSFT", "QQQ", "0050.TW", "DJT", "TSLA", "BITO", "DELL", "UMAC", "XOM", "GEO", "PLTR"]
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=[t for t in default_active if t in all_current_tickers])
 
 # 🎮 策略控制
 st.sidebar.header("🎯 策略快速情境預設")
@@ -382,7 +383,27 @@ with st.spinner("正在同步全球資產實時核心信號..."):
             calculated_entry_target = min(low_absorb_price, current_bb_lower)
             
             fv_low, fv_high = calculate_wallstreet_fair_range(ticker, stock.info, current_price, shiller_pe=calculated_shiller_pe)
-            fcf_yield_str, institutional_str = fetch_institutional_and_fcf_data(ticker, stock.info)
+            fcf_yield_str, institutional_str, raw_fcf_num = fetch_institutional_and_fcf_data(ticker, stock.info)
+
+            # 🛡️ 【底層全自動內化：防爆過濾核心邏輯】
+            # 當系統原本給出建倉建議時，強制實施投行級基本面驗證，不通過者直接剝奪買入權，降級回觀望！
+            trap_triggered_reason = ""
+            if final_action in ["🔥 強力買入", "🟢 買入"]:
+                # 1. 驗證現金流：杜絕沒有實質賺取正現金、只靠財報美化的虛胖股票
+                if raw_fcf_num is not None and raw_fcf_num < 0:
+                    final_action = "⚪ 觀望"
+                    trap_triggered_reason = "⚠️ 價值陷阱：FCF Yield 錄得負數 (失血)"
+                elif raw_fcf_num is None:
+                    final_action = "⚪ 觀望"
+                    trap_triggered_reason = "⚠️ 價值陷阱：現金流財務數據嚴重缺失"
+                
+                # 2. 驗證價值沉淪：現價已高於遭華爾街大砍財測後的公允價值上限，拒絕進場接刀
+                if fv_high and current_price > fv_high:
+                    final_action = "⚪ 觀望"
+                    trap_triggered_reason = "⚠️ 價值陷阱：公允價值重估下修 (沉淪)"
+
+            # 動態組裝市場狀態顯示
+            display_market_status = f"{market_state} | {trap_triggered_reason}" if trap_triggered_reason else market_state
 
             summary_data.append({
                 "產業領域": ticker_sector,
@@ -390,7 +411,7 @@ with st.spinner("正在同步全球資產實時核心信號..."):
                 "綜合建議": final_action,
                 "當前現價": f"{currency_symbol}{current_price:.1f}",
                 "系統掛單買點": f"{currency_symbol}{calculated_entry_target:.1f}", 
-                "市場狀態": market_state,
+                "市場狀態": display_market_status,
                 "合理價值區間": f"{currency_symbol}{fv_low:.1f} - {fv_high:.1f}",
                 "自由現金流收益率": fcf_yield_str,
                 "機構法人持股比例": institutional_str
@@ -421,9 +442,9 @@ if summary_data:
     full_df = pd.DataFrame(summary_data)
     
     categories = [
-        {"name": "🔥 強力買入", "title": "🔥 強力買入標的 (左側極致促銷點)"},
-        {"name": "🟢 買入", "title": "🟢 買入標的 (中線合理折價區)"},
-        {"name": "⚪ 觀望", "title": "⚪ 觀望標的 (高位震盪/結構不明)"},
+        {"name": "🔥 強力買入", "title": "🔥 強力買入標的 (左側極致促銷點 —— 經基本面核心認證)"},
+        {"name": "🟢 買入", "title": "🟢 買入標的 (中線合理折價區 —— 經基本面核心認證)"},
+        {"name": "⚪ 觀望", "title": "⚪ 觀望標的 (高位震盪 / 結構不明 / ⚠️已自動觸發防爆過濾鎖)"},
         {"name": "🔴 賣出", "title": "🔴 賣出標的 (短線動能超買區)"},
         {"name": "🚨 強力賣出", "title": "🚨 強力賣出標的 (破位結構風險區)"}
     ]
