@@ -91,9 +91,9 @@ def fetch_systemic_risk_timeline():
     return pd.DataFrame({
         "風險警示區間": ["🚨 當前至 06月中旬", "🔥 2026年 Q3 全季", "🦅 2026年 Q4 季度末"],
         "核心系統性事件": ["🛰️ SpaceX 歷史級巨型 IPO 抽資令", "🛢️ 中東衝突升級 (美伊局勢與油價震盪)", "🏦 聯準會新任主席上台政策換屆"],
-        "機構籌碼動向與輔助選股防線 (精簡版)": [
-            "💰 機構為騰出資金認購 SpaceX，會在 6/12 前夕砍倉大型科技股（NVDA, MSFT）引發失血回調。此區間切忌過度放大槓桿。",
-            " Volcano 美伊若開戰，油價破 100 美元將重燃通膨。高估值晶片股面臨修正，資金將流向防禦能源股（OXY, XOM）。",
+        "機構籌碼動向與輔助選股防線": [
+            "💰 機構為騰出資金認購 SpaceX，會在 6/12 前夕砍倉大型科技股引發失血回調。此區間切忌過度放大槓桿。",
+            " Volcano 美伊若開戰，油價破 100 美元將重燃通膨。高估值晶片股面臨修正，資金將流向防禦能源股。",
             "🦅 新主席為立威可能超預期加息。估值面臨系統性降維，系統會嚴格執行 FCF 現金流防護鎖，剔除所有無獲利投機股。"
         ]
     })
@@ -320,8 +320,7 @@ INITIAL_SECTOR_MAP = {
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
-default_active = ["TSM", "NVDA", "AAPL", "MSFT", "QQQ", "0050.TW", "DJT", "TSLA", "BITO", "DELL", "UMAC", "XOM", "GEO", "PLTR"]
-active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=[t for t in default_active if t in all_current_tickers])
+active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
 
 # 🎮 策略控制
 st.sidebar.header("🎯 策略快速情境預設")
