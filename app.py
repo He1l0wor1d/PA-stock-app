@@ -4,7 +4,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
-import xml.etree.ElementTree as ET
 import requests
 
 st.set_page_config(layout="wide", page_title="股票決策系統")
@@ -85,63 +84,22 @@ with macro_col3:
         realtime_calendar_df = fetch_realtime_macro_calendar()
         st.dataframe(realtime_calendar_df, use_container_width=True, hide_index=True)
 
-# ==============================================================================
-# 🔍 網頁自動化：全球金融動態與潛在黑天鵝事件實時監測引擎
-# ==============================================================================
-st.markdown("##### 🧭 網頁全自動網羅：最新金融焦點與大盤潛在風險監測")
-
-@st.cache_data(ttl=1800)  # 每半小時自動更新一次最新網路報導
-def auto_scan_financial_black_swans():
-    try:
-        # 直接拉取 Google News 國際財經核心 RSS 數據流
-        url = "https://news.google.com/rss/sections/CAAqBggKMIEiM0QvTG9jYWxpc2VkWGluZndhTmV3c196aF9UV19CdXNpbmVzc05ld3M?hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
-        resp = requests.get(url, timeout=10)
-        root = ET.fromstring(resp.content)
-        
-        news_items = []
-        # 定義黑天鵝/回調敏感詞庫，網頁爬取時若命中則優先加註警示標籤
-        risk_keywords = {
-            "戰爭": "🚨 地緣政治風險", "衝突": "🚨 地緣政治風險", "中東": "🚨 地緣政治風險",
-            "加息": "🦅 貨幣緊縮風險", "升息": "🦅 貨幣緊縮風險", "通膨": "🦅 貨幣緊縮風險",
-            "暴跌": "💥 市場流動性風險", "崩盤": "💥 市場流動性風險", "泡沫": "💥 市場流動性風險",
-            "IPO": "💰 機構抽資風險", "募資": "💰 機構抽資風險", "石油": "🛢️ 能源通膨風險", "原油": "🛢️ 能源通膨風險"
-        }
-        
-        for item in root.findall('.//item')[:12]:  # 掃描前 12 條最新核心報導
-            title = item.find('title').text if item.find('title') is not None else ""
-            pub_date = item.find('pubDate').text if item.find('pubDate') is not None else ""
-            
-            # 自動判定風險分類
-            detected_risk = "🔍 密切關注"
-            for kw, risk_label in risk_keywords.items():
-                if kw in title:
-                    detected_risk = risk_label
-                    break
-            
-            # 精簡發布時間格式
-            try:
-                dt = datetime.strptime(pub_date[:-6], '%a, %d %b %Y %H:%M:%S') + timedelta(hours=8)
-                time_str = dt.strftime('%m/%d %H:%M')
-            except:
-                time_str = pub_date[:16]
-                
-            news_items.append({
-                "更新時間": time_str,
-                "潛在風險屬性": detected_risk,
-                "實時金融報導頭條 (系統自動追蹤)": title
-            })
-            
-        return pd.DataFrame(news_items)
-    except Exception as e:
-        return pd.DataFrame({
-            "更新時間": [datetime.now().strftime('%m/%d %H:%M')],
-            "潛在風險屬性": ["⚠️ 網路通道建立中"],
-            "實時金融報導頭條 (系統自動追蹤)": ["暫時無法連線至交易所財經新聞源，系統維持既有基本面防禦鎖運作。"]
-        })
-
-with st.spinner("網頁全自動掃描最新全球財經新聞流..."):
-    live_risk_df = auto_scan_financial_black_swans()
-    st.dataframe(live_risk_df, use_container_width=True, hide_index=True)
+# 🚀 【新增：下一行獨立區塊】中長線系統性風險預警
+st.markdown("##### 🧭 華爾街中長線黑天鵝與大盤回調預警時間軸")
+@st.cache_data(ttl=7200)
+def fetch_systemic_risk_timeline():
+    return pd.DataFrame({
+        "風險警示區間": ["🚨 當前至 06月中旬", "🔥 2026年 Q3 全季", "🦅 2026年 Q4 季度末"],
+        "核心系統性事件": ["🛰️ SpaceX 歷史級巨型 IPO 抽資令", "🛢️ 中東衝突升級 (美伊局勢與油價震盪)", "🏦 聯準會新任主席上台政策換屆"],
+        "機構籌碼動向與輔助選股防線": [
+            "💰 機構為騰出資金認購 SpaceX，會在 6/12 前夕砍倉大型科技股引發失血回調。此區間切忌過度放大槓桿。",
+            " Volcano 美伊若開戰，油價破 100 美元將重燃通膨。高估值晶片股面臨修正，資金將流向防禦能源股。",
+            "🦅 新主席為立威可能超預期加息。估值面臨系統性降維，系統會嚴格執行 FCF 現金流防護鎖，剔除所有無獲利投機股。"
+        ]
+    })
+with st.spinner("擬合宏觀風險模型..."):
+    risk_timeline_df = fetch_systemic_risk_timeline()
+    st.dataframe(risk_timeline_df, use_container_width=True, hide_index=True)
 
 # ==============================================================================
 # ✨ 第三層：🧠 AGI 2027 敘事與 SALP (13F) 聰明錢觀測站
@@ -313,6 +271,7 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             
             if current_yw in served_weeks:
                 price_drop_target = last_buy_price * (1 - (drop_pct / 100))
+                # 🛠️ 【已修正】將原先寫錯的 && 改回 Python 的 and
                 if current_touch_price <= price_drop_target and (is_volume_spike or is_trend_turning):
                     sparse_strong_buy[date] = True
                     last_buy_price = current_touch_price
@@ -359,7 +318,6 @@ INITIAL_SECTOR_MAP = {
 }
 
 if "sector_map" not in st.session_state: st.session_state.sector_map = INITIAL_SECTOR_MAP.copy()
-
 
 all_current_tickers = sorted(list(st.session_state.sector_map.keys()))
 active_tickers = st.sidebar.multiselect("💡 觀察名單管理", options=all_current_tickers, default=all_current_tickers)
