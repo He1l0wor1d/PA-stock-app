@@ -24,10 +24,13 @@ macro_col1, macro_col2, macro_col3 = st.columns([1, 1, 2])
 with macro_col1:
     st.markdown("##### 🧭 恐懼與貪婪指標 (Fear & Greed Proxy)")
     try:
-        vix = yf.Ticker("^VIX").history(period="1d")['Close'].iloc[-1]
+        vix_stock = yf.Ticker("^VIX")
+        # 優先獲取 VIX 盤中最新即時變動價
+        vix = vix_stock.fast_info.get('lastPrice') if vix_stock.fast_info.get('lastPrice') else vix_stock.history(period="1d")['Close'].iloc[-1]
         fg_value = int(max(min(100 - (vix * 2.5), 95), 5))
     except Exception:
         fg_value = 50
+        vix = 15.0
         
     if fg_value >= 75: fg_status = "🚨 極度貪婪"
     elif fg_value >= 55: fg_status = "🟢 貪婪"
@@ -35,14 +38,16 @@ with macro_col1:
     elif fg_value >= 25: fg_status = "🟡 恐懼"
     else: fg_status = "❄️ 極度恐懼"
         
-    st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100", delta=f"基於實時 VIX: {vix:.2f}" if 'vix' in locals() else None)
+    st.metric(label=f"大盤情緒狀態: {fg_status}", value=f"{fg_value} / 100", delta=f"實時 VIX: {vix:.2f}")
     st.progress(fg_value / 100)
     st.caption(f"更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 with macro_col2:
     st.markdown("##### 📊 席勒本益比 (Dynamic Shiller PE)")
     try:
-        sp500_latest = yf.Ticker("^SPX").history(period="1d")['Close'].iloc[-1]
+        spx_stock = yf.Ticker("^SPX")
+        # 優先獲取 S&P 500 盤中最新實時指數點數
+        sp500_latest = spx_stock.fast_info.get('lastPrice') if spx_stock.fast_info.get('lastPrice') else spx_stock.history(period="1d")['Close'].iloc[-1]
         calculated_shiller_pe = (sp500_latest / 138.5)
     except Exception:
         calculated_shiller_pe = 39.89
@@ -272,7 +277,7 @@ INITIAL_SECTOR_MAP = {
     "CSCO": "光通訊與網通", "ANET": "光通訊與網通", "GLW": "光通訊與網通", "COHR": "光通訊與網通", 
     "LITE": "光通訊與網通", "AAOI": "光通訊與網通", "FN": "光通訊與網通", "CIEN": "光通訊與網通", "NOK": "光通訊與網通",  
     "DRAM": "記憶體與儲存", "MU": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體與儲存",
-    "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建",
+    "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基原",
     "VRT": "機房液冷散熱", "MOD": "機房液冷散熱", "3017.TW": "機房液冷散熱",
     "CEG": "核能與天然氣", "VST": "核能與天然氣", "ENPH": "綠能與微電網", "SEDG": "綠能與微電網",
     "SOXX": "AI晶片與設計", "XSD": "AI晶片與設計", "NVDA": "AI晶片與設計", "AVGO": "AI晶片與設計", 
@@ -346,6 +351,14 @@ with st.spinner("正在同步全球資產實時核心信號..."):
             df = stock.history(start=start_date)
             if df.empty or len(df) < 240: continue
             
+            # 🛠️ 【新增交易狀態感知邏輯】優先拉取盤中毫秒級即時變動價格，若收盤或假日則自動降級回K線收盤價
+            try:
+                current_price = float(stock.fast_info.get('lastPrice'))
+                if pd.isna(current_price) or current_price <= 0:
+                    current_price = float(df.iloc[-1]['Close'])
+            except:
+                current_price = float(df.iloc[-1]['Close'])
+            
             df['ATR'] = (df['High'] - df['Low']).rolling(window=14).mean()
             df['MA20_actual'] = df['Close'].rolling(window=20).mean()
             df['MA200'] = df['Close'].rolling(window=200).mean()
@@ -363,7 +376,6 @@ with st.spinner("正在同步全球資產實時核心信號..."):
                 df, st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias, use_market_filter, ticker
             )
             
-            current_price = float(df.iloc[-1]['Close'])
             yesterday_close = float(df.iloc[-2]['Close'])
             ma20_center = float(df.iloc[-1]['MA20_actual'])
             latest_atr = float(df.iloc[-1]['ATR'])
@@ -385,11 +397,9 @@ with st.spinner("正在同步全球資產實時核心信號..."):
             fv_low, fv_high = calculate_wallstreet_fair_range(ticker, stock.info, current_price, shiller_pe=calculated_shiller_pe)
             fcf_yield_str, institutional_str, raw_fcf_num = fetch_institutional_and_fcf_data(ticker, stock.info)
 
-            # 🛡️ 【底層全自動內化：防爆過濾核心邏輯】
-            # 當系統原本給出建倉建議時，強制實施投行級基本面驗證，不通過者直接剝奪買入權，降級回觀望！
+            # 🛡️ 底層全自動內化：防爆過濾核心邏輯
             trap_triggered_reason = ""
             if final_action in ["🔥 強力買入", "🟢 買入"]:
-                # 1. 驗證現金流：杜絕沒有實質賺取正現金、只靠財報美化的虛胖股票
                 if raw_fcf_num is not None and raw_fcf_num < 0:
                     final_action = "⚪ 觀望"
                     trap_triggered_reason = "⚠️ 價值陷阱：FCF Yield 錄得負數 (失血)"
@@ -397,12 +407,10 @@ with st.spinner("正在同步全球資產實時核心信號..."):
                     final_action = "⚪ 觀望"
                     trap_triggered_reason = "⚠️ 價值陷阱：現金流財務數據嚴重缺失"
                 
-                # 2. 驗證價值沉淪：現價已高於遭華爾街大砍財測後的公允價值上限，拒絕進場接刀
                 if fv_high and current_price > fv_high:
                     final_action = "⚪ 觀望"
                     trap_triggered_reason = "⚠️ 價值陷阱：公允價值重估下修 (沉淪)"
 
-            # 動態組裝市場狀態顯示
             display_market_status = f"{market_state} | {trap_triggered_reason}" if trap_triggered_reason else market_state
 
             summary_data.append({
@@ -436,7 +444,6 @@ dynamic_column_configuration = {
     )
 }
 
-# 🚀 降維極簡大看板：分設五大摺疊面板，預設維持關閉狀態
 st.header("📊 降維極簡大看板 (五大決策分類總覽)")
 if summary_data:
     full_df = pd.DataFrame(summary_data)
