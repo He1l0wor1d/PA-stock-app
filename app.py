@@ -230,7 +230,6 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
     
     low_absorb_bound = df['MA20_actual'] - (df['ATR'] * atr_mult)
     price_cond = (df['Low'] <= low_absorb_bound) | (df['Low'] <= df['BB_Lower'])
-    rsi_cond = df['RSI'] <= rsi_val
     
     individual_buy_counter = 0
     served_weeks = set()
@@ -241,8 +240,12 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
     
     for date, is_triggered in price_cond.items():
         current_close = df.loc[date, 'Close']
+        current_low = df.loc[date, 'Low']
         current_atr = df.loc[date, 'ATR']
-        if pd.isna(current_close) or pd.isna(current_atr) or pd.isna(df.loc[date, 'MA5']): continue
+        current_rsi = df.loc[date, 'RSI']
+        target_buy = low_absorb_bound.loc[date]
+        
+        if pd.isna(current_close) or pd.isna(current_atr) or pd.isna(df.loc[date, 'MA5']) or pd.isna(target_buy): continue
             
         atr_price_ratio = (current_atr / current_close) * 100
         is_high_risk_asset = atr_price_ratio > 5.2 or (current_close < df.loc[date, 'MA200'])
@@ -251,8 +254,33 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
         if is_dry_falling:
             if not is_premium_asset and is_high_risk_asset and individual_buy_counter >= 2: continue  
             if is_premium_asset and individual_buy_counter >= 4: continue  
+        
+        # ==================== 方案 B：多因子權重評分制修改區 ====================
+        # 1. 價格得分系統 (最高 60 分)
+        if current_low <= target_buy * 0.97:       # 比買點還要多跌了 3% 以上
+            price_score = 60
+        elif current_low <= target_buy:            # 精準踩到或跌破買點
+            price_score = 50
+        elif current_low <= target_buy * 1.01:     # 極度靠近買點 1% 以內
+            price_score = 35
+        else:
+            price_score = 0
+            
+        # 2. RSI 情緒加分系統 (最高 40 分)
+        if current_rsi <= rsi_val:                 # 順利跌破你設定的超賣標準 (例如 35)
+            rsi_score = 40
+        elif current_rsi <= rsi_val + 5:           # 稍微高於超賣標準 (例如 35~40)
+            rsi_score = 25
+        elif current_rsi <= rsi_val + 10:          # 接近超賣標準 (例如 40~45)
+            rsi_score = 10
+        else:
+            rsi_score = 0
+            
+        # 總分大於等於 60 分即算技術面通過 (如：跌幅極深60分 + RSI不恐慌10分 = 70分 順利通過)
+        weight_passed = (price_score + rsi_score) >= 60
+        # ====================================================================
                 
-        if is_triggered and rsi_cond.loc[date]:
+        if is_triggered and weight_passed:
             current_ma200 = df.loc[date, 'MA200']
             current_ma200_bias = ((current_ma200 - df.loc[date, 'Low']) / current_ma200) * 100 if not pd.isna(current_ma200) else 0
             is_market_safe_today = df.loc[date, 'SPY_Safe']
@@ -271,7 +299,6 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             
             if current_yw in served_weeks:
                 price_drop_target = last_buy_price * (1 - (drop_pct / 100))
-                # 🛠️ 【已修正】將原先寫錯的 && 改回 Python 的 and
                 if current_touch_price <= price_drop_target and (is_volume_spike or is_trend_turning):
                     sparse_strong_buy[date] = True
                     last_buy_price = current_touch_price
