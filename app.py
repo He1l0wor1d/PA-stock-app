@@ -66,23 +66,75 @@ with macro_col2:
 if calculated_shiller_pe is None or pd.isna(calculated_shiller_pe):
     calculated_shiller_pe = 39.89
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=1800)
 def fetch_realtime_macro_calendar():
-    today_dt = datetime.now()
-    start_of_week = today_dt - timedelta(days=today_dt.weekday())
-    dates_list = [(start_of_week + timedelta(days=i)).strftime('%m/%d') for i in range(5)]
-    week_days = ["(一)", "(二)", "(三)", "(四)", "(五)"]
-    return pd.DataFrame({
-        "公佈日期": [f"{d} {w}" for d, w in zip(dates_list, week_days)],
-        "當週關鍵事件": ["核心 PCE 物價指數", "Fed 貨幣政策紀要", "EIA 原油庫存變動", "初請失業金人數", "非農就業人口 / 失業率"],
-        "市場預期與決策牽動": ["🎯 預期年增 +2.6% | 牽動降息預期", "🦅 觀測官員終端利率鷹鴿派態度", "🛢️ 預期庫存 -120 萬桶 | 影響能源板塊", "💼 預期 21.5 萬人 | 觀測就業市場韌性", "📈 預期新增 16.5 萬人 | 大盤防禦鎖關鍵指標"]
-    })
+    try:
+        # 定義核心總體經濟定價資產錨點
+        macro_tickers = {
+            "^TNX": ("美債 10 年期殖利率", "🎯 牽動科技股估值與 Fed 降息預期"),
+            "CL=F": ("紐約輕原油期貨", "🛢️ 牽動全球通膨預期與能源板塊動向"),
+            "GC=F": ("黃金期貨 (XAU)", "👑 避險情緒指標 / 觀測黑天鵝恐慌資金流"),
+            "^EURUSD": ("歐元兌美元 (DXY權重)", "💵 牽動外匯與美元強弱指數變化"),
+        }
+        
+        names, prices, changes, impacts = [], [], [], []
+        
+        for ticker, (name, impact) in macro_tickers.items():
+            t = yf.Ticker(ticker)
+            hist = t.history(period="2d")
+            if len(hist) >= 2:
+                latest_p = hist['Close'].iloc[-1]
+                prev_p = hist['Close'].iloc[-2]
+                pct_change = ((latest_p - prev_p) / prev_p) * 100
+                sign = "+" if pct_change >= 0 else ""
+                
+                price_str = f"{latest_p:.2f}%" if ticker == "^TNX" else f"${latest_p:.2f}"
+                change_str = f"{sign}{pct_change:.2f}%"
+            else:
+                price_str = "數據暫缺"
+                change_str = "--"
+                
+            names.append(name)
+            prices.append(price_str)
+            changes.append(change_str)
+            impacts.append(impact)
+            
+        return pd.DataFrame({
+            "全球核心宏觀指標": names,
+            "實時現價": prices,
+            "今日漲跌幅": changes,
+            "決策牽動與市場反饋": impacts
+        })
+        
+    except Exception:
+        today_dt = datetime.now()
+        start_of_week = today_dt - timedelta(days=today_dt.weekday())
+        dates_list = [(start_of_week + timedelta(days=i)).strftime('%m/%d') for i in range(5)]
+        week_days = ["(一)", "(二)", "(三)", "(四)", "(五)"]
+        return pd.DataFrame({
+            "全球核心宏觀指標": [f"{d} {w} 關鍵數據" for d, w in zip(dates_list, week_days)],
+            "實時現價": ["連線中...", "連線中...", "連線中...", "連線中...", "連線中..."],
+            "今日漲跌幅": ["⏳", "⏳", "⏳", "⏳", "⏳"],
+            "決策牽動與市場反饋": ["核心 PCE 物價指數", "Fed 貨幣政策紀要", "EIA 原油庫存變動", "初請失業金人數", "非農就業人口 / 失業率"]
+        })
 
 with macro_col3:
-    st.markdown(f"##### 📅 當週關鍵財經行事曆")
-    with st.spinner("載入當週事件..."):
+    st.markdown(f"##### 📅 當週關鍵財經實時數據面")
+    with st.spinner("正在同步全球宏觀定價錨點..."):
         realtime_calendar_df = fetch_realtime_macro_calendar()
-        st.dataframe(realtime_calendar_df, use_container_width=True, hide_index=True)
+        
+        def color_change(val):
+            if '-' in str(val):
+                return 'color: #00cc66; font-weight: bold;'  # 綠色
+            elif '+' in str(val):
+                return 'color: #ff3333; font-weight: bold;'  # 紅色
+            return ''
+            
+        try:
+            styled_df = realtime_calendar_df.style.map(color_change, subset=['今日漲跌幅'])
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        except Exception:
+            st.dataframe(realtime_calendar_df, use_container_width=True, hide_index=True)
 
 # 🚀 【新增：下一行獨立區塊】中長線系統性風險預警
 st.markdown("##### 🧭 華爾街中長線黑天鵝與大盤回調預警時間軸")
@@ -93,7 +145,7 @@ def fetch_systemic_risk_timeline():
         "核心系統性事件": ["🛰️ SpaceX 歷史級巨型 IPO 抽資令", "🛢️ 中東衝突升級 (美伊局勢與油價震盪)", "🏦 聯準會新任主席上台政策換屆"],
         "機構籌碼動向與輔助選股防線": [
             "💰 機構為騰出資金認購 SpaceX，會在 6/12 前夕砍倉大型科技股引發失血回調。",
-            " Volcano 美伊若開戰，油價破 100 美元將重燃通膨。高估值晶片股面臨修正。",
+            "🌋 美伊若開戰，油價破 100 美元將重燃通膨。高估值晶片股面臨修正。",
             "🦅 新主席為立威可能超預期加息。估值面臨系統性降維，系統會嚴格執行 FCF 現金流防護鎖。"
         ]
     })
