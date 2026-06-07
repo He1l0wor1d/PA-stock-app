@@ -67,98 +67,85 @@ if calculated_shiller_pe is None or pd.isna(calculated_shiller_pe):
     calculated_shiller_pe = 39.89
 
 # ==============================================================================
-# 📅 【全新合併】6月巨型財經行事曆與黑天鵝預警大表格 (含實時資產聯動與極端推演)
+# 📅 【全新精簡】6月全球事件與台股籌碼落底矩陣 (三叉路口定價)
 # ==============================================================================
 st.markdown("---")
-st.markdown("##### 📅 6月全球核心財經行事曆、黑天鵝事件與大盤回調推演矩陣")
+st.markdown("##### 📅 6月全球事件定價與台股籌碼落底觀測矩陣")
 
-@st.cache_data(ttl=300)  # 每 5 分鐘實時重新計算市場定價
-def fetch_integrated_june_calendar():
-    # 實時透過 yfinance 抓取市場錨點資產
+@st.cache_data(ttl=300)
+def fetch_lean_june_calendar():
     try:
-        tnx = yf.Ticker("^TNX").history(period="2d")    # 10年期美債殖利率
-        cl = yf.Ticker("CL=F").history(period="2d")     # 紐約輕原油
-        dx = yf.Ticker("DX-Y.NYB").history(period="2d") # 美元指數
-        
+        tnx = yf.Ticker("^TNX").history(period="2d")
+        cl = yf.Ticker("CL=F").history(period="2d")
         current_tnx = tnx['Close'].iloc[-1] if not tnx.empty else 4.35
         current_oil = cl['Close'].iloc[-1] if not cl.empty else 78.5
-        current_dxy = dx['Close'].iloc[-1] if not dx.empty else 104.2
     except Exception:
-        current_tnx, current_oil, current_dxy = 4.35, 78.5, 104.2
+        current_tnx, current_oil = 4.35, 78.5
 
-    # 建立整合型 6 月大型矩陣數據
     data = {
-        "預警與公佈時間": [
-            "🚨 6月上旬 (已實時定價)",
-            "🔥 6月上旬 (已實時定價)",
-            "🚀 6/02 - 6/12 關鍵期",
-            "🦅 6月中旬 (即將來襲)",
-            "🏦 6月中旬 (即將來襲)",
-            "🇯🇵 6月中旬 (即將來襲)",
-            "🌋 2026年 Q3 全季預警",
-            "🏦 2026年 Q4 季度末預警"
+        "核心事件 (時間)": [
+            "💼 5月大非農 (已公佈)",
+            "🇹🇼 台股籌碼防線 (6/8起)",
+            "🎯 美國 5月 CPI (6月中)",
+            "🦅 Fed FOMC 點陣圖 (6月中)",
+            "💴 日本 BOJ 利率 (6月中)",
+            "🛰️ SpaceX IPO (6月上中旬)",
+            "🛢️ OPEC+ 產量會議 (6月)"
         ],
-        "核心系統性事件": [
-            "💼 5月大非農就業人口 / 失業率",
-            "🛢️ OPEC+ 部長級產量會議",
-            "🛰️ SpaceX 歷史級巨型 IPO 抽資令",
-            "🎯 美國 5 月 CPI 消費者物價指數",
-            "🦅 Fed FOMC 利率決策會議 & 點陣圖",
-            "🇯🇵 BOJ 日本央行貨幣政策會議",
-            "🌋 中東衝突升級 (美伊局勢震盪)",
-            "🏦 聯準會新任主席上台政策換屆"
+        "基準線 / 實時數據": [
+            f"🔥 實際 17.2萬 (預期 8.5萬) / 美債: {current_tnx:.2f}%",
+            "📊 融資維持率與外資期貨空單數據",
+            "🎯 預期總體 CPI 年增 +3.4%",
+            "🦅 預期利率不變 / 觀察降息次數",
+            "💴 預期縮減購債規模 (QT)",
+            "💰 預估吸金凍結千億美元",
+            f"🛢️ 逐步縮減減產 / 油價: ${current_oil:.1f}"
         ],
-        "市場預期 / 基準線": [
-            "📈 預期新增 8.5 萬人 / 失業率 4.3%",
-            "🛢️ 預期維持自願減產至 Q3 後逐步復產",
-            "💰 華爾街預估認購凍結資金達千億美元",
-            "🎯 預期總體 CPI 年增 +3.4% / 核心 +3.5%",
-            "🦅 預期維持利率不變，點陣圖縮減降息次數",
-            "💴 預期啟動縮減購債規模 (QT)，釋放鷹派信號",
-            "🛢️ 基準油價維持在 $75 - $85 區間震盪",
-            "⚖️ 預期新主席延續限制性利率政策"
+        "【🟢 多頭劇本】如何定價": [
+            "新增17.2萬代表經濟極強韌，若失業率守住，有利基本面續強。",
+            "📉 融資減肥至 3,100 億以下，且外資期貨空單淨部位回補至 1.5 萬口以下 ➔ 融資洗乾淨，短線落底穩定。",
+            "📉 實際 < 3.4%：通膨加速降溫，美債殖利率回落，科技股將迎來噴出慶祝。",
+            "🟢 點陣圖維持年內降息 2 碼：鮑爾軟著陸言論護盤，大盤破頂續軋空。",
+            "💴 縮債力道溫和且日圓緩升：亞股資金環境維持穩定。",
+            "🚀 順利申購且未造成權值股大量流動性折價：巨星IPO點燃太空產業動能。",
+            "📉 油價跌破 $75：大幅減輕通膨壓力，利好全球股市估值修復。"
         ],
-        "實時資產反應 & 現況": [
-            f"🔥 實際: 17.2萬人 (暴超預期) / 4.3% (美債殖利率現報 {current_tnx:.2f}%)",
-            f"✅ 實際: 達成逐步縮減減產共識 (油價現報 ${current_oil:.1f})",
-            "⚠️ 現況: 機構正於二級市場調整部位，準備現金流",
-            f"🔍 待公佈 (美元指數現報 {current_dxy:.2f})",
-            f"🔍 待公佈 (市場預期年內降息機率已大幅受挫)",
-            "🔍 待公佈 (日圓匯率與套利交易平倉壓力加劇)",
-            f"🌋 潛在風險：若戰事爆發，油價存在破 $100 隱憂",
-            "🦅 政治風險：新官上台三把火的「超預期加息」硬著陸定價"
+        "【⚪ 中性劇本】如何定價": [
+            "數據雖熱但還不到失控，美債若卡在 4.3%~4.4% 震盪，市場回歸基本面。",
+            "⚪ 融資在 3,200 億橫盤，外資空單維持 2.5 萬口上下 ➔ 大盤以時間換取空間，進入高檔震盪箱型結構。",
+            "⚖️ 實際 = 3.4%：符合預期，市場維持既定降息節奏，大盤繼續走板塊輪動。",
+            "⚪ 點陣圖顯示降息 1 碼：符合當前市場所反映的鷹派定價，大盤利空出盡。",
+            "💴 縮債符合預期：日圓維持 152-155 區間，套利交易無大規模平倉風險。",
+            "⚪ 正常抽資：科技股僅受 2~3 天短暫資金排擠，隨後止穩。",
+            "⚖️ 油價在 $75 - $82 震盪：能源通膨不溫不火，對大盤無大礙。"
         ],
-        "極端情境推演與華爾街防禦性指南 (多空牽動)": [
-            "🚨 【降息預期大崩盤】非農爆發超預期近一倍，證實勞動市場過熱。市場擔憂降息路徑全面延後，機構開啟防禦性再升息1碼定價。推演：若美債飆破 4.7%，科技股高估值面臨系統性降維修正，美股大盤恐誘發 8-10% 的獲利了結回調。",
-            "🛢️ 【商品通膨兩極化】若實際復產速度快於需求，油價崩跌將利好美股通膨降溫；反之若沙烏地強力控盤，油價踩穩 $80 以上將黏滯通膨。當前現貨定價顯示夏季用油旺季有撐，未引發連鎖暴發。",
-            "💰 【科技股失血回調】華爾街一級交易商為了騰出巨額資金認購 SpaceX 這隻歷史級獨角獸，會在 6/12 截止前夕，策略性「砍倉或大宗交易」權值股（如微軟、輝達、蘋果）以抽回流動性。引發大型科技股無基之彈式失血。",
-            "📈 【通膨復燃黑天鵝】若實際 CPI > 3.6%，市場將徹底絕望並定價「年內零降息」甚至「重啟升息」。推演：納指將觸發 5% 以上熔斷式暴跌；若 CPI < 3.2% 則降息預期滿血復活，大盤開啟新一輪軋空主升段。",
-            "🦅 【鷹派點陣圖狙擊】若點陣圖中位數顯示 2026 年僅降息 1 碼（或不降息），鮑爾言論偏鷹。推演：高估值晶片股與軟體巨頭面臨修正，資金將加速逃向具備強大 Free Cash Flow (FCF) 的防禦性價值板塊。",
-            "💴 【日圓渡邊太太大平倉】若 BOJ 縮債力道超預期，觸發日圓急升破 140。推演：全球「借日圓買美股科技股」的龐大套利交易 (Carry Trade) 將被迫集體斷頭平倉，引發美股及台股權值股（如TSM）短線無預警踩踏。",
-            "🌋 【惡性通膨重燃】美伊若直接衝突，油價破百將直接摧毀聯準會的軟著陸劇本。高估值半導體與消費性電子將首當其衝。系統將嚴格執行 FCF 現金流防護鎖，強制將買入評級轉為觀望。",
-            "🦅 【政策立威風險】新主席為建立抗通膨威信，可能祭出超預期加息。估值模型面臨系統性重估，策略將全面轉向保守型網格，保留高比率現金流。"
+        "【🚨 空頭劇本】如何定價": [
+            "🚨 降息預期全面潰退，機構定價再升息。美債若噴破 4.7%，大盤恐崩跌 10%。",
+            "🚨 融資持續在 3,400 億高位、外資空單飆破 3.5 萬口 ➔ 多頭籌碼擁擠、多單不死空頭不止，小心融資斷頭連環殺。",
+            "🔥 實際 > 3.4%：通膨死灰復燃，市場定價「重啟升息」，納指恐誘發 5% 以上崩跌。",
+            "🦅 點陣圖顯示「今年不降息」或有委員支持升息：鷹風狂吹，科技股高估值面臨系統性降維修正。",
+            "⚡ 超預期鷹派縮債（日圓暴升破 140）：全球「借日圓買科技股」的套利資金集體斷頭，引發亞美股市無預警踩踏。",
+            "💰 一級交易商為認購 SpaceX 瘋狂砍倉科技權值股（微軟、輝達等），市場失血修正。",
+            "🔥 油價暴漲破 $90：重燃惡性通膨危機，系統強制執行防爆鎖，全面轉為觀望。"
         ]
     }
     return pd.DataFrame(data)
 
-with st.spinner("正在擬合宏觀風險模型、即時跨市場資產定價中..."):
-    integrated_calendar_df = fetch_integrated_june_calendar()
+with st.spinner("正在擬合最新宏觀與台股籌碼落底矩陣..."):
+    lean_calendar_df = fetch_lean_june_calendar()
     
-    # 美化表格：將極端震撼的非農列、SpaceX與FOMC進行高亮
-    def highlight_matrix(row):
-        if "非農" in str(row["核心系統性事件"]):
-            return ['background-color: #fff0f0; color: #ff3333; font-weight: bold;'] * len(row)
-        elif "SpaceX" in str(row["核心系統性事件"]):
-            return ['background-color: #f0f7ff; color: #0066cc; font-weight: bold;'] * len(row)
-        elif "FOMC" in str(row["核心系統性事件"]):
-            return ['background-color: #f9f0ff; color: #7f00ff; font-weight: bold;'] * len(row)
+    def highlight_lean(row):
+        if "台股" in str(row["核心事件 (時間)"]):
+            return ['background-color: #fffaf0; color: #d97706; font-weight: bold;'] * len(row)
+        elif "非農" in str(row["核心事件 (時間)"]) or "CPI" in str(row["核心事件 (時間)"]):
+            return ['background-color: #fff0f0; color: #dc2626;'] * len(row)
         return [''] * len(row)
         
     try:
-        styled_matrix = integrated_calendar_df.style.apply(highlight_matrix, axis=1)
-        st.dataframe(styled_matrix, use_container_width=True, hide_index=True)
+        styled_lean = lean_calendar_df.style.apply(highlight_lean, axis=1)
+        st.dataframe(styled_lean, use_container_width=True, hide_index=True)
     except Exception:
-        st.dataframe(integrated_calendar_df, use_container_width=True, hide_index=True)
+        st.dataframe(lean_calendar_df, use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
