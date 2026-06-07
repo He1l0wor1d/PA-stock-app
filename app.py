@@ -1,17 +1,13 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
-import requests
+from datetime import datetime
 
 st.set_page_config(layout="wide", page_title="股票決策系統")
-st.title("股票『極簡五燈號』輔助決策系統")
-st.markdown("本系統將多空結構簡化並給予五等 Action 建議。")
+st.title("股票『精準決策五燈號』系統")
 
 # ==============================================================================
-# 第一層：全球總體經濟與市場情緒觀測站 (實時聯動 + 雙重風險預警)
+# 第一層：全球總體經濟與市場情緒觀測站
 # ==============================================================================
 st.markdown("### 全球總體經濟與市場情緒觀測站")
 
@@ -21,131 +17,106 @@ if st.button("立即觀測最新市場數據 (強制重新載入)"):
 
 macro_col1, macro_col2 = st.columns([1, 1])
 
-calculated_shiller_pe = None
-
 with macro_col1:
     st.markdown("##### 恐懼與貪婪指標")
     try:
         vix_stock = yf.Ticker("^VIX")
-        vix = vix_stock.fast_info.get('lastPrice')
-        if pd.isna(vix) or vix <= 0:
-            vix = vix_stock.history(period="1d")['Close'].iloc[-1]
+        vix = vix_stock.history(period="1d")['Close'].iloc[-1]
         fg_value = int(max(min(100 - (vix * 2.5), 95), 5))
-        
-        if fg_value >= 75: fg_status = "極度貪婪"
-        elif fg_value >= 55: fg_status = "貪婪"
-        elif fg_value >= 45: fg_status = "中性"
-        elif fg_value >= 25: fg_status = "恐懼"
-        else: fg_status = "極度恐懼"
+        fg_status = "極度貪婪" if fg_value >= 75 else "貪婪" if fg_value >= 55 else "中性" if fg_value >= 45 else "恐懼" if fg_value >= 25 else "極度恐懼"
         st.metric(label=f"情緒: {fg_status}", value=f"{fg_value} / 100", delta=f"實時 VIX: {vix:.2f}")
         st.progress(fg_value / 100)
-    except Exception:
+    except:
         st.metric(label="情緒: 連線中", value="-- / 100")
-    st.caption(f"更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 with macro_col2:
     st.markdown("##### 席勒本益比")
     try:
-        spx_stock = yf.Ticker("^SPX")
-        sp500_latest = spx_stock.fast_info.get('lastPrice')
-        if pd.isna(sp500_latest) or sp500_latest <= 0:
-            sp500_latest = spx_stock.history(period="1d")['Close'].iloc[-1]
-            
+        sp500_latest = yf.Ticker("^SPX").history(period="1d")['Close'].iloc[-1]
         calculated_shiller_pe = (sp500_latest / 138.5)
-        historical_mean = 17.1
-        deviation = ((calculated_shiller_pe - historical_mean) / historical_mean) * 100
-        
-        if calculated_shiller_pe > 35: pe_status = "極度昂貴"
-        elif calculated_shiller_pe > 25: pe_status = "偏高昂"
-        elif calculated_shiller_pe > 18: pe_status = "合理區"
-        else: pe_status = "便宜藍海"
-        st.metric(label=f"CAPE Ratio ({pe_status})", value=f"{calculated_shiller_pe:.2f}", delta=f"高於均值 {deviation:.1f}%", delta_color="inverse")
-    except Exception:
-        st.metric(label="CAPE Ratio", value="⚠️ 連線中")
-
-if calculated_shiller_pe is None or pd.isna(calculated_shiller_pe):
-    calculated_shiller_pe = 39.89
+        pe_status = "極度昂貴" if calculated_shiller_pe > 35 else "偏高昂" if calculated_shiller_pe > 25 else "合理區"
+        st.metric(label=f"CAPE Ratio ({pe_status})", value=f"{calculated_shiller_pe:.2f}")
+    except:
+        st.metric(label="CAPE Ratio", value="連線中")
 
 # ==============================================================================
-# 📅 【核心精簡版】6月全球事件與台股籌碼落底矩陣
+# 📅 6月精準時間軸與多空決策矩陣 (已公佈直述影響 / 未公佈精準推演)
 # ==============================================================================
 st.markdown("---")
-st.markdown("##### 6月全球核心事件多空決策推演矩陣")
+st.markdown("##### 📅 6月精準時間軸與多空決策矩陣")
 
 @st.cache_data(ttl=300)
-def fetch_lean_june_calendar():
+def fetch_precise_june_calendar():
     try:
-        tnx = yf.Ticker("^TNX").history(period="2d")
-        cl = yf.Ticker("CL=F").history(period="2d")
-        current_tnx = tnx['Close'].iloc[-1] if not tnx.empty else 4.35
-        current_oil = cl['Close'].iloc[-1] if not cl.empty else 78.5
-    except Exception:
+        current_tnx = yf.Ticker("^TNX").history(period="1d")['Close'].iloc[-1]
+        current_oil = yf.Ticker("CL=F").history(period="1d")['Close'].iloc[-1]
+    except:
         current_tnx, current_oil = 4.35, 78.5
 
     data = {
-        "核心事件 (時間)": [
-            "5月非農 (已公佈)",
-            "台股籌碼 (6/8起)",
-            "美國 CPI (6月中)",
-            "Fed FOMC (6月中)",
-            "日本 BOJ (6月中)",
-            "SpaceX IPO (6月)",
-            "OPEC+ 會議 (6月)"
+        "核心事件 (公佈時間)": [
+            "5月非農數據 (6/5 已公佈)",
+            "台股籌碼防線 (6/8 起)",
+            "美國 5月 CPI (6/10)",
+            "Fed FOMC 利率 (6/11 凌晨)",
+            "SpaceX IPO (6/12)",
+            "日本 BOJ 利率 (6/19)",
+            "OPEC+ 減產會議 (6月下旬)"
         ],
         "基準線 / 實時數據": [
-            f"實際17.2萬(預期8.5萬) / 美債: {current_tnx:.2f}%",
+            "實際17.2萬 (遠超預期8.5萬)",
             "融資維持率與外資期貨空單",
             "預期總體 CPI 年增 +3.4%",
-            "預期利率不變 / 聚焦點陣圖降息次數",
-            "預期縮減購債規模 (QT)",
+            "預期利率不變 / 聚焦點陣圖",
             "預估凍結流動性千億美元",
-            f"逐步縮減減產 / 油價: ${current_oil:.1f}"
+            "預期縮減購債規模 (QT)",
+            f"預期逐步縮減減產/油價:${current_oil:.1f}"
         ],
-        "【多頭劇本】": [
-            "經濟強韌，美債守4.4%以下則利空出盡。",
-            "融資<3100億 + 外資空單<1.5萬口 -> 融資洗淨短線落底。",
-            "實際<3.4% -> 通膨降溫美債回落，科技股大噴出。",
-            "維持年內降息2碼 -> 鮑爾鴿派護盤，大盤創高續軋。",
-            "縮債溫和 + 日圓緩升 -> 亞股流動性警報解除。",
-            "順利認購無折價 -> 點燃太空與航太衛星板塊動能。",
-            "油價跌破$75 -> 減輕通膨壓力，全球股市估值修復。"
+        "【🟢 多頭劇本 / 既定事實】": [
+            "實際影響：就業過熱導致美債暴噴至 4.43%，費半當日重挫 10%，科技股面臨強震動盪。",
+            "融資<3100億 + 外資空單<1.5萬口 -> 浮額洗淨，殺融資結束，短線落底穩定。",
+            "實際<3.4% -> 通膨加速降溫，美債回落，科技股迎來主升段噴出。",
+            "點陣圖維持年內降息2碼 -> 鮑爾鴿派護盤，大盤創高續軋。",
+            "順利認購無折價 -> 資金未排擠權值股，點燃太空航太板塊動能。",
+            "縮債溫和 + 日圓緩升 -> 亞股流動性警報解除，維持高檔。",
+            "油價跌破$75 -> 減輕通膨壓力，全球股市估值修復向上。"
         ],
-        "【中性劇本】": [
-            "數據熱但未失控，美債4.3%-4.5%震盪，板塊健康輪動。",
-            "融資3200億橫盤 + 外資空單約2.5萬口 -> 大盤高檔箱型震盪。",
-            "實際=3.4% -> 符合預期，維持原降息節奏，股市延續慢牛。",
+        "【⚪ 中性劇本】": [
+            "— (已公佈，不適用推演) —",
+            "融資3200億橫盤 + 外資空單約2.5萬口 -> 時間換空間，高檔箱型震盪。",
+            "實際=3.4% -> 符合預期，維持原降息節奏，股市延續慢牛階梯震盪。",
             "降息縮減至1碼 -> 符合當前市場定價，利空出盡個股表現。",
+            "正常抽資 -> 科技權值股僅受2-3天短暫資金排擠後迅速止穩。",
             "縮債符預期 + 日圓152-155 -> 套利交易無大規模平倉風險。",
-            "正常抽資 -> 科技權值股受2-3天短暫排擠後止穩。",
-            "油價$75-$82震盪 -> 能源通膨受控，對大盤無威脅。"
+            "油價$75-$82震盪 -> 能源通膨受控，對大盤不構成威脅。"
         ],
-        "【空頭劇本】": [
-            "降息預期大退，美債噴破4.7% -> 科技股修正，大盤回調8-10%。",
-            "融資>3400億 + 外資空單>3.5萬口 -> 籌碼擁擠提防斷頭連環殺。",
-            "實際>3.4% -> 通膨重燃，定價重啟升息，納指恐崩5%以上。",
-            "點陣圖暗示今年不降息 -> 鷹風狂吹，高估值科技股系統性修正。",
-            "激進縮債/日圓升破140 -> 全球套利資金集體斷頭踩踏亞美股。",
-            "機構瘋砍科技股套現認購SpaceX -> 權值股失血向下修正。",
-            "油價暴漲破$90 -> 引爆通膨危機，系統強制定價轉為觀望。"
+        "【🚨 空頭劇本】": [
+            "— (已公佈，不適用推演) —",
+            "融資>3400億 + 外資空單>3.5萬口 -> 籌碼擁擠，提防多殺多斷頭連環殺。",
+            "實際>3.4% -> 通膨重燃，定價重啟升息，納指恐現5%以上崩跌。",
+            "點陣圖暗示今年不降息 -> 鷹風狂吹，高估值科技股系統性向下修正。",
+            "機構瘋砍權值股套現認購SpaceX -> 科技巨頭失血誘發流動性折價。",
+            "激進縮債/日圓升破140 -> 全球套利資金集體斷頭，引發亞美股踩踏。",
+            "油價暴漲破$90 -> 引爆新一輪通膨危機，系統強制定價全面轉觀望。"
         ]
     }
     return pd.DataFrame(data)
 
-with st.spinner("正在擬合最新宏觀與台股籌碼落底矩陣..."):
-    lean_calendar_df = fetch_lean_june_calendar()
+with st.spinner("正在擬合精準時間軸與籌碼矩陣..."):
+    precise_calendar_df = fetch_precise_june_calendar()
     
-    def highlight_lean(row):
-        if "台股" in str(row["核心事件 (時間)"]):
+    def highlight_precise(row):
+        if "台股" in str(row["核心事件 (公佈時間)"]):
             return ['background-color: #fffaf0; color: #d97706; font-weight: bold;'] * len(row)
-        elif "非農" in str(row["核心事件 (時間)"]) or "CPI" in str(row["核心事件 (時間)"]):
-            return ['background-color: #fff0f0; color: #dc2626;'] * len(row)
+        elif "非農" in str(row["核心事件 (公佈時間)"]):
+            return ['background-color: #f3f4f6; color: #4b5563; italic;'] * len(row)
         return [''] * len(row)
         
     try:
-        styled_lean = lean_calendar_df.style.apply(highlight_lean, axis=1)
-        st.dataframe(styled_lean, use_container_width=True, hide_index=True)
-    except Exception:
-        st.dataframe(lean_calendar_df, use_container_width=True, hide_index=True)
+        styled_precise = precise_calendar_df.style.apply(highlight_precise, axis=1)
+        st.dataframe(styled_precise, use_container_width=True, hide_index=True)
+    except:
+        st.dataframe(precise_calendar_df, use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
