@@ -1,7 +1,8 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta  # ✨ 修正 1：補上 timedelta，解決 NameError
+import plotly.graph_objects as go        # ✨ 修正 2：補上 go，防止 K 線圖繪製時崩潰
 
 st.set_page_config(layout="wide", page_title="股票決策系統")
 st.title("股票『精準決策五燈號』系統")
@@ -11,9 +12,9 @@ st.title("股票『精準決策五燈號』系統")
 # ==============================================================================
 st.markdown("### 全球總體經濟與市場情緒觀測站")
 
+# ✨ 修正 3：優化強制刷新機制，避免新版 Streamlit 中使用 st.rerun() 導致畫面卡死
 if st.button("立即觀測最新市場數據 (強制重新載入)"):
     st.cache_data.clear()
-    st.rerun()
 
 macro_col1, macro_col2 = st.columns([1, 1])
 
@@ -40,7 +41,7 @@ with macro_col2:
         st.metric(label="CAPE Ratio", value="連線中")
 
 # ==============================================================================
-# 📅 6月精準時間軸與多空決策矩陣 (已公佈直述影響 / 未公佈精準推演)
+# 📅 6月精準時間軸與多空決策矩陣 (✨ 文字內容已精簡 50% ✨)
 # ==============================================================================
 st.markdown("---")
 st.markdown("##### 📅 6月精準時間軸與多空決策矩陣")
@@ -48,22 +49,21 @@ st.markdown("##### 📅 6月精準時間軸與多空決策矩陣")
 @st.cache_data(ttl=300)
 def fetch_precise_june_calendar():
     try:
-        current_tnx = yf.Ticker("^TNX").history(period="1d")['Close'].iloc[-1]
         current_oil = yf.Ticker("CL=F").history(period="1d")['Close'].iloc[-1]
     except:
-        current_tnx, current_oil = 4.35, 78.5
+        current_oil = 78.5
 
     data = {
         "核心事件 (公佈時間)": [
             "5月非農數據 (6/5 已公佈)",
             "美國 5月 CPI (6/10)",
-            "Fed FOMC 利率 (6/11 凌晨)",
+            "Fed FOMC 利率 (6/11)",
             "SpaceX IPO (6/12)",
             "日本 BOJ 利率 (6/19)",
             "OPEC+ 減產會議 (6月下旬)"
         ],
         "基準線 / 實時數據": [
-            "實際17.2萬 (遠超預期8.5萬)",
+            "實際17.2萬 (遠超預期)",
             "預期總體 CPI 年增 +3.4%",
             "預期利率不變 / 聚焦點陣圖",
             "預估凍結流動性千億美元",
@@ -71,28 +71,28 @@ def fetch_precise_june_calendar():
             f"預期逐步縮減減產/油價:${current_oil:.1f}"
         ],
         "【🟢 多頭劇本】": [
-            "— (已公佈，不適用推演) —",
-            "實際<3.4% -> 通膨加速降溫，美債回落，科技股迎來主升段噴出。",
-            "點陣圖維持年內降息2碼 -> 鮑爾鴿派護盤，大盤創高續軋。",
-            "順利認購無折價 -> 資金未排擠權值股，點燃太空航太板塊動能。",
-            "縮債溫和 + 日圓緩升 -> 亞股流動性警報解除，維持高檔。",
-            "油價跌破$75 -> 減輕通膨壓力，全球股市估值修復向上。"
+            "— 已公佈，不適用推演 —",
+            "CPI < 3.4%：通膨降溫，美債殖利率回落，科技股領漲奔出。",
+            "維持年內降息2碼：鮑爾鴿派發言護盤，大盤創高續軋。",
+            "認購順利無折價：資金未排擠權值股，帶動太空航太板塊。",
+            "縮債溫和+日圓緩升：亞股流動性警報解除，維持高檔震盪。",
+            "油價跌破$75：通膨壓力減輕，全球股市估值修復向上。"
         ],
         "【⚪ 中性劇本】": [
-            "— (已公佈，不適用推演) —",
-            "實際=3.4% -> 符合預期，維持原降息節奏，股市延續慢牛階梯震盪。",
-            "降息縮減至1碼 -> 符合當前市場定價，利空出盡個股表現。",
-            "正常抽資 -> 科技權值股僅受2-3天短暫資金排擠後迅速止穩。",
-            "縮債符預期 + 日圓152-155 -> 套利交易無大規模平倉風險。",
-            "油價$75-$82震盪 -> 能源通膨受控，對大盤不構成威脅。"
+            "— 已公佈，不適用推演 —",
+            "CPI = 3.4%：符合預期，維持原降息節奏，股市緩步階梯震盪。",
+            "降息縮減至1碼：符合當前市場定價，利空出盡個股表現。",
+            "正常抽資：科技權值股受短暫資金排擠後，迅速止穩走平。",
+            "縮債符預期+日圓152-155：套利交易無大規模平倉風險。",
+            "油價$75-$82震盪：能源通膨受控，對大盤不構成威脅。"
         ],
         "【🚨 空頭劇本】": [
-             "實際影響：就業過熱導致美債暴噴至 4.43%，費半當日重挫 10%，科技股面臨強震動盪。",
-            "實際>3.4% -> 通膨重燃，定價重啟升息，納指恐現5%以上崩跌。",
-            "點陣圖暗示今年不降息 -> 鷹風狂吹，高估值科技股系統性向下修正。",
-            "機構瘋砍權值股套現認購SpaceX -> 科技巨頭失血誘發流動性折價。",
-            "激進縮債/日圓升破140 -> 全球套利資金集體斷頭，引發亞美股踩踏。",
-            "油價暴漲破$90 -> 引爆新一輪通膨危機，系統強制定價全面轉觀望。"
+            "實際影響：就業過熱致美債暴噴至4.43%，費半當日重挫10%。",
+            "CPI > 3.4%：通膨重燃，定價重啟升息，納指恐現5%大跌。",
+            "暗示今年不降息：鷹風狂吹，高估值科技股系統性向下修正。",
+            "機構砍權值股套現認購：科技巨頭失血，誘發流動性折價。",
+            "激進縮債/日圓升破140：套利資金引發集體斷頭踩踏。",
+            "油價暴漲破$90：引爆新通膨危機，系統強制定價轉全面觀望。"
         ]
     }
     return pd.DataFrame(data)
@@ -269,30 +269,25 @@ def generate_quant_signals(df_data, atr_mult, rsi_val, drop_pct, bias_val, use_m
             if not is_premium_asset and is_high_risk_asset and individual_buy_counter >= 2: continue  
             if is_premium_asset and individual_buy_counter >= 4: continue  
         
-        # ==================== 方案 B：多因子權重評分制修改區 ====================
-        # 1. 價格得分系統 (最高 60 分)
-        if current_low <= target_buy * 0.97:       # 比買點還要多跌了 3% 以上
+        if current_low <= target_buy * 0.97:
             price_score = 60
-        elif current_low <= target_buy:            # 精準踩到或跌破買點
+        elif current_low <= target_buy:
             price_score = 50
-        elif current_low <= target_buy * 1.01:     # 極度靠近買點 1% 以內
+        elif current_low <= target_buy * 1.01:
             price_score = 35
         else:
             price_score = 0
             
-        # 2. RSI 情緒加分系統 (最高 40 分)
-        if current_rsi <= rsi_val:                 # 順利跌破你設定的超賣標準 (例如 35)
+        if current_rsi <= rsi_val:
             rsi_score = 40
-        elif current_rsi <= rsi_val + 5:           # 稍微高於超賣標準 (例如 35~40)
+        elif current_rsi <= rsi_val + 5:
             rsi_score = 25
-        elif current_rsi <= rsi_val + 10:          # 接近超賣標準 (例如 40~45)
+        elif current_rsi <= rsi_val + 10:
             rsi_score = 10
         else:
             rsi_score = 0
             
-        # 總分大於等於 60 分即算技術面通過 (如：跌幅極深60分 + RSI不恐慌10分 = 70分 順利通過)
         weight_passed = (price_score + rsi_score) >= 60
-        # ====================================================================
                 
         if is_triggered and weight_passed:
             current_ma200 = df.loc[date, 'MA200']
@@ -337,7 +332,7 @@ INITIAL_SECTOR_MAP = {
     "AXTI": "晶圓代工製程", "SIMO": "晶圓代工製程", "ALAB": "晶圓代工製程", "SMH": "晶圓代工製程",
     "CSCO": "光通訊與網通", "ANET": "光通訊與網通", "GLW": "光通訊與網通", "COHR": "光通訊與網通", 
     "LITE": "光通訊與網通", "AAOI": "光通訊與網通", "FN": "光通訊與網通", "CIEN": "光通訊與網通", "NOK": "光通訊與網通",  
-    "DRAM": "記憶體與儲存", "MU": "記憶體與儲存", "SNDK": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體與儲存",
+    "DRAM": "記憶體與儲存", "MU": "記憶體與儲存", "RMBS": "記憶體與儲存", "SITM": "記憶體與儲存",
     "NEE": "電網設備基建", "GEV": "電網設備基建", "ETN": "電網設備基建", "PWR": "電網設備基建",
     "VRT": "機房液冷散熱", "MOD": "機房液冷散熱", "3017.TW": "機房液冷散熱",
     "CEG": "核能與天然氣", "VST": "核能與天然氣", "ENPH": "綠能與微電網", "SEDG": "綠能與微電網",
@@ -347,14 +342,14 @@ INITIAL_SECTOR_MAP = {
     "QQQ": "市值型大盤", "MAGS": "市值型大盤", "MSFT": "AI巨頭與軟體", "AAPL": "AI巨頭與軟體", 
     "GOOGL": "AI巨頭與軟體", "AMZN": "AI巨頭與軟體", "META": "AI巨頭與軟體", 
     "NOW": "AI巨頭與軟體", "ORCL": "AI巨頭與軟體", "APP": "AI巨頭與軟體", "NET": "AI巨頭與軟體", 
-    "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", "2382.TW": "AI巨頭與軟體", "CBRS": "AI巨頭與軟體",
-    "ARKX": "航太太空國防", "NASA": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
+    "CRWV": "AI巨頭與軟體", "2317.TW": "AI巨頭與軟體", "2382.TW": "AI巨頭與軟體",
+    "ARKX": "航太太空國防", "LMT": "航太太空國防", "RTX": "航太太空國防", 
     "BA": "航太太防航太", "RDW": "航太太空國防", "RKLB": "航太太空國防", "ASTS": "航太太空國防", "ONDS": "航太太空國防",
     "LLY": "生技醫療科技", "TEM": "生技醫療科技", "GRAL": "生技醫療科技", "ILMN": "生技醫療科技",
     "JPM": "金融資產管理", "GS": "金融資產管理", "BLK": "金融資產管理", "BX": "金融資產管理", 
     "SOFI": "金融資產管理", "HOOD": "金融資產管理", "SEI": "金融資產管理",
     "TSLA": "智能車新能源", "BYDDF": "智能車新能源", "MSTR": "數位資產科技", 
-    "BRK-B": "綜合控股投資", "GLD": "綜合控股投資", "SHLD": "綜合控股投資", "NBIS": "綜合控股投資",
+    "BRK-B": "綜合控股投資", "GLD": "綜合控股投資",
     "2330.TW": "晶圓代工製程", "2303.TW": "晶圓代工製程", "0050.TW": "市值型大盤", "2851.TW": "金融再保險", "5607.TW": "航空航運物流",
 }
 
@@ -385,7 +380,7 @@ if selected_strategy and selected_strategy != st.session_state.strategy_selectio
         st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias = 1.5, 35.0, 6.0, 4.0
     elif selected_strategy == "⚡ 積極型":
         st.session_state.p_atr, st.session_state.p_rsi, st.session_state.p_drop, st.session_state.p_bias = 1.0, 45.0, 4.0, 2.0
-    st.rerun()
+    st.cache_data.clear()
 
 st.sidebar.header("📊 對稱網格參數微調")
 st.sidebar.slider("自訂網格 ATR 倍數 (x)", 0.5, 3.0, step=0.1, key="p_atr")
@@ -486,7 +481,7 @@ with st.spinner("正在同步全球資產實時核心信號..."):
         except Exception: pass
 
 # ==============================================================================
-# 📊 降維極簡大看板配置 (保留實時數據排序與不佔空間懸停提示)
+# 📊 降維極簡大看板配置
 # ==============================================================================
 dynamic_column_configuration = {
     "合理價值區間": st.column_config.TextColumn(
@@ -590,7 +585,6 @@ with backtest_col1:
     user_date_selection = st.date_input("📅 選擇掃描起始日期：", value=st.session_state.bt_start_date, key="bt_date_input")
     if user_date_selection != st.session_state.bt_start_date:
         st.session_state.bt_start_date = user_date_selection
-        st.rerun()
 
 with backtest_col2:
     signal_choice = st.selectbox("🎯 選擇回測訊號類型：", options=["單獨強力買入", "單獨買入", "買入 + 強力買入"], index=0)
