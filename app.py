@@ -7,15 +7,15 @@ from datetime import datetime, timedelta
 import requests
 
 st.set_page_config(layout="wide", page_title="股票決策系統")
-st.title("🦅 股票『極簡五燈號』輔助決策系統")
+st.title("股票『極簡五燈號』輔助決策系統")
 st.markdown("本系統將多空結構簡化並給予五等 Action 建議。")
 
 # ==============================================================================
-# 🌐 第一層：全球總體經濟與市場情緒觀測站 (實時聯動 + 雙重風險預警)
+# 第一層：全球總體經濟與市場情緒觀測站 (實時聯動 + 雙重風險預警)
 # ==============================================================================
-st.markdown("### 🌐 全球總體經濟與市場情緒觀測站")
+st.markdown("### 全球總體經濟與市場情緒觀測站")
 
-if st.button("🔄 立即觀測最新市場數據 (強制重新載入)"):
+if st.button("立即觀測最新市場數據 (強制重新載入)"):
     st.cache_data.clear()
     st.rerun()
 
@@ -24,7 +24,7 @@ macro_col1, macro_col2 = st.columns([1, 1])
 calculated_shiller_pe = None
 
 with macro_col1:
-    st.markdown("##### 🧭 恐懼與貪婪指標")
+    st.markdown("##### 恐懼與貪婪指標")
     try:
         vix_stock = yf.Ticker("^VIX")
         vix = vix_stock.fast_info.get('lastPrice')
@@ -32,19 +32,19 @@ with macro_col1:
             vix = vix_stock.history(period="1d")['Close'].iloc[-1]
         fg_value = int(max(min(100 - (vix * 2.5), 95), 5))
         
-        if fg_value >= 75: fg_status = "🚨 極度貪婪"
-        elif fg_value >= 55: fg_status = "🟢 貪婪"
-        elif fg_value >= 45: fg_status = "⚪ 中性"
-        elif fg_value >= 25: fg_status = "🟡 恐懼"
-        else: fg_status = "❄️ 極度恐懼"
+        if fg_value >= 75: fg_status = "極度貪婪"
+        elif fg_value >= 55: fg_status = "貪婪"
+        elif fg_value >= 45: fg_status = "中性"
+        elif fg_value >= 25: fg_status = "恐懼"
+        else: fg_status = "極度恐懼"
         st.metric(label=f"情緒: {fg_status}", value=f"{fg_value} / 100", delta=f"實時 VIX: {vix:.2f}")
         st.progress(fg_value / 100)
     except Exception:
-        st.metric(label="情緒: ⚠️ 連線中", value="-- / 100")
+        st.metric(label="情緒: 連線中", value="-- / 100")
     st.caption(f"更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 with macro_col2:
-    st.markdown("##### 📊 席勒本益比")
+    st.markdown("##### 席勒本益比")
     try:
         spx_stock = yf.Ticker("^SPX")
         sp500_latest = spx_stock.fast_info.get('lastPrice')
@@ -55,10 +55,10 @@ with macro_col2:
         historical_mean = 17.1
         deviation = ((calculated_shiller_pe - historical_mean) / historical_mean) * 100
         
-        if calculated_shiller_pe > 35: pe_status = "🚨 極度昂貴"
-        elif calculated_shiller_pe > 25: pe_status = "🟡 偏高昂"
-        elif calculated_shiller_pe > 18: pe_status = "🟢 合理區"
-        else: pe_status = "🔵 便宜藍海"
+        if calculated_shiller_pe > 35: pe_status = "極度昂貴"
+        elif calculated_shiller_pe > 25: pe_status = "偏高昂"
+        elif calculated_shiller_pe > 18: pe_status = "合理區"
+        else: pe_status = "便宜藍海"
         st.metric(label=f"CAPE Ratio ({pe_status})", value=f"{calculated_shiller_pe:.2f}", delta=f"高於均值 {deviation:.1f}%", delta_color="inverse")
     except Exception:
         st.metric(label="CAPE Ratio", value="⚠️ 連線中")
@@ -67,10 +67,10 @@ if calculated_shiller_pe is None or pd.isna(calculated_shiller_pe):
     calculated_shiller_pe = 39.89
 
 # ==============================================================================
-# 📅 【徹底精簡】6月全球事件與台股籌碼落底矩陣 (一眼看懂版)
+# 📅 【核心精簡版】6月全球事件與台股籌碼落底矩陣
 # ==============================================================================
 st.markdown("---")
-st.markdown("##### 📅 6月全球核心事件多空決策推演矩陣")
+st.markdown("##### 6月全球核心事件多空決策推演矩陣")
 
 @st.cache_data(ttl=300)
 def fetch_lean_june_calendar():
@@ -84,49 +84,49 @@ def fetch_lean_june_calendar():
 
     data = {
         "核心事件 (時間)": [
-            "💼 5月非農 (已公佈)",
-            "🇹🇼 台股籌碼 (6/8起)",
-            "🎯 美國 CPI (6月中)",
-            "🦅 Fed FOMC (6月中)",
-            "💴 日本 BOJ (6月中)",
-            "🛰️ SpaceX IPO (6月)",
-            "🛢️ OPEC+ 會議 (6月)"
+            "5月非農 (已公佈)",
+            "台股籌碼 (6/8起)",
+            "美國 CPI (6月中)",
+            "Fed FOMC (6月中)",
+            "日本 BOJ (6月中)",
+            "SpaceX IPO (6月)",
+            "OPEC+ 會議 (6月)"
         ],
         "基準線 / 實時數據": [
-            f"🔥 實際 17.2萬 (預期 8.5萬) / 美債: {current_tnx:.2f}%",
-            "📊 融資維持率與外資期貨空單數據",
-            "🎯 預期總體 CPI 年增 +3.4%",
-            "🦅 預期利率不變 / 聚焦年內點陣圖",
-            "💴 預期縮減購債 (QT)",
-            "💰 預估凍結資金千億美元",
-            f"🛢️ 逐步縮減減產 / 油價: ${current_oil:.1f}"
+            f"實際17.2萬(預期8.5萬) / 美債: {current_tnx:.2f}%",
+            "融資維持率與外資期貨空單",
+            "預期總體 CPI 年增 +3.4%",
+            "預期利率不變 / 聚焦點陣圖降息次數",
+            "預期縮減購債規模 (QT)",
+            "預估凍結流動性千億美元",
+            f"逐步縮減減產 / 油價: ${current_oil:.1f}"
         ],
-        "【🟢 多頭劇本】": [
-            "經濟強韌、非惡性過熱，有利基本面。美債守在 4.4% 以下則利空出盡。",
-            "📉 融資 < 3100億 + 外資空單 < 1.5萬口。➔ 籌碼洗淨，殺融資結束，短線落底穩定。",
-            "📉 實際 < 3.4%：通膨加速降溫，美債回落，科技股迎來主升段大噴出。",
-            "🟢 點陣圖維持年內降息 2 碼：鮑爾鴿派護盤，大盤破頂續軋空。",
-            "💴 縮債溫和 + 日圓緩升：亞股資金警報解除，維持高檔震盪。",
-            "🚀 順利認購且無流動性折價：巨星IPO點燃太空、航太與衛星通訊板塊。",
-            "📉 油價跌破 $75：大幅減輕通膨壓力，全球股市估值修復向上。"
+        "【多頭劇本】": [
+            "經濟強韌，美債守4.4%以下則利空出盡。",
+            "融資<3100億 + 外資空單<1.5萬口 -> 融資洗淨短線落底。",
+            "實際<3.4% -> 通膨降溫美債回落，科技股大噴出。",
+            "維持年內降息2碼 -> 鮑爾鴿派護盤，大盤創高續軋。",
+            "縮債溫和 + 日圓緩升 -> 亞股流動性警報解除。",
+            "順利認購無折價 -> 點燃太空與航太衛星板塊動能。",
+            "油價跌破$75 -> 減輕通膨壓力，全球股市估值修復。"
         ],
-        "【⚪ 中性劇本】": [
-            "數據熱但未失控，美債在 4.3%~4.5% 震盪，大盤維持板塊健康輪動。",
-            "⚪ 融資 3200億橫盤 + 外資空單約 2.5萬口。➔ 以時間換空間，大盤進入高檔箱型震盪。",
-            "⚖️ 實際 = 3.4%：符合預期，維持既定降息節奏，股市延續原有軌道走階梯式慢牛。",
-            "⚪ 點陣圖縮減至降息 1 碼：符合市場預期，利空出盡，個股表現為主。",
-            "💴 縮債符合預期 + 日圓 152-155：套利交易無大規模平倉踩踏風險。",
-            "⚪ 正常抽資：科技權值股僅受 2~3 天短暫資金排擠，隨後迅速止穩。",
-            "⚖️ 油價在 $75-$82 震盪：能源通膨受控，對大盤不構成威脅。"
+        "【中性劇本】": [
+            "數據熱但未失控，美債4.3%-4.5%震盪，板塊健康輪動。",
+            "融資3200億橫盤 + 外資空單約2.5萬口 -> 大盤高檔箱型震盪。",
+            "實際=3.4% -> 符合預期，維持原降息節奏，股市延續慢牛。",
+            "降息縮減至1碼 -> 符合當前市場定價，利空出盡個股表現。",
+            "縮債符預期 + 日圓152-155 -> 套利交易無大規模平倉風險。",
+            "正常抽資 -> 科技權值股受2-3天短暫排擠後止穩。",
+            "油價$75-$82震盪 -> 能源通膨受控，對大盤無威脅。"
         ],
-        "【🚨 空頭劇本】": [
-            "🚨 降息預期大潰退，美債噴破 4.7%。➔ 科技股估值修正，大盤恐誘發 8-10% 回調。",
-            "🚨 融資 > 3400億 + 外資空單 > 3.5萬口。➔ 籌碼過熱、多單不死空頭不止，提防斷頭連環殺。",
-            "🔥 實際 > 3.4%：通膨重燃，市場定價「重啟升息」，納指恐現 5% 以上崩跌。",
-            "🦅 點陣圖暗示「今年不降息」：鷹風狂吹，高估值科技股面臨系統性降維修正。",
-            "⚡ 激進縮債（日圓暴升破 140）：全球套利資金集體斷頭平倉，引發亞美股無預警踩踏。",
-            "💰 機構瘋狂砍倉科技權值股（微軟、輝達）以騰出認購資金，大盤失血向下修正。",
-            "🔥 油價暴漲破 $90：引爆通膨危機，系統強制啟動防爆鎖，全面轉為觀望。"
+        "【空頭劇本】": [
+            "降息預期大退，美債噴破4.7% -> 科技股修正，大盤回調8-10%。",
+            "融資>3400億 + 外資空單>3.5萬口 -> 籌碼擁擠提防斷頭連環殺。",
+            "實際>3.4% -> 通膨重燃，定價重啟升息，納指恐崩5%以上。",
+            "點陣圖暗示今年不降息 -> 鷹風狂吹，高估值科技股系統性修正。",
+            "激進縮債/日圓升破140 -> 全球套利資金集體斷頭踩踏亞美股。",
+            "機構瘋砍科技股套現認購SpaceX -> 權值股失血向下修正。",
+            "油價暴漲破$90 -> 引爆通膨危機，系統強制定價轉為觀望。"
         ]
     }
     return pd.DataFrame(data)
